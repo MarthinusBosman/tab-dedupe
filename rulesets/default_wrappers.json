@@ -1,0 +1,17 @@
+{
+  "name": "Default link wrappers",
+  "unwrap": [
+    {
+      "id": "ms-safelinks-teams",
+      "name": "Microsoft Safe Links (Teams)",
+      "pattern": "**/safelinks/*/atp-safelinks.html",
+      "param": "url"
+    },
+    {
+      "id": "ms-safelinks-outlook",
+      "name": "Microsoft Safe Links (Outlook)",
+      "pattern": "*.safelinks.protection.outlook.com",
+      "param": "url"
+    }
+  ]
+}

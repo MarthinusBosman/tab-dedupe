@@ -30,8 +30,7 @@ opening a new one, using URL rules you control.
 - `tabs`: Needed to read the URLs of open tabs, to detect whether a newly opened page is already open and to switch
   to, update or close tabs. URLs are processed locally and never transmitted.
 - `storage`: Saves the user's rules and settings, and the last downloaded copy of any online ruleset.
-- `webNavigation`: Follows a newly opened tab through redirects (for example Microsoft Safe Links pages in Teams
-  and Outlook) so a link that lands on an already-open page is still recognised. Only redirects of a just-opened
+- `webNavigation`: Follows a newly opened tab through redirects (sign-in pages, link scanners) so a link that lands on an already-open page is still recognised. Only redirects of a just-opened
   tab are looked at; nothing is stored or transmitted.
 - `alarms`: Refreshes user-added online rulesets on a schedule (default every 24 hours).
 - `scripting`: Only used when the user turns on the optional duplicate marker, to add "🔁" to the title of
@@ -40,8 +39,8 @@ opening a new one, using URL rules you control.
   (needed to set tab titles) or adds an online ruleset hosted on a server without open CORS headers. Not granted
   at install.
 
-**Remote code**: No, I am not using remote code. (Online rulesets are JSON data containing URL patterns; they
-are validated and never executed.)
+**Remote code**: No, I am not using remote code. (Online rulesets and link wrappers are JSON data containing URL
+patterns; they are validated and never executed.)
 
 **Data usage**: collects none of the listed data types. Tick all three certifications.
 
@@ -88,4 +87,4 @@ Pinned tabs are never closed and InPrivate tabs are never touched. No tracking, 
 
 To test: open any page, then open the same URL in a new tab; the new tab closes and the first one is focused.
 Settings page → "Test a URL" shows which rule matches. Online rulesets are plain JSON (example:
-https://raw.githubusercontent.com/MarthinusBosman/tab-dedupe/main/rulesets/azure-devops.json); nothing is executed.
+https://raw.githubusercontent.com/MarthinusBosman/tab-dedupe/main/rulesets/default_ruleset.json); nothing is executed.

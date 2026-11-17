@@ -17,8 +17,10 @@ it. The store version doesn't get this prompt.
 
 - A new tab whose page is already open (a link opened in a new tab, a URL typed into a new tab, a link from Teams or
   Outlook) is closed, and the existing tab is focused. Navigating inside a tab is never touched.
-- Links wrapped by Microsoft Safe Links (Teams, Outlook) are matched by their real URL, and a new tab is followed
-  through redirects for a few seconds, so links that arrive via a redirect are caught too.
+- Link wrappers (redirect pages such as Microsoft Safe Links in Teams and Outlook) are unwrapped to the real URL
+  first. They are data, not code: the defaults live in `rulesets/default_wrappers.json`, and anyone can add more.
+- New tabs are followed through redirects for a few seconds (switchable), so links that arrive via a redirect
+  without a link wrapper are caught too.
 - Default "same page": same URL ignoring `#fragment`, trailing slash and http/https. The query string still counts.
 - Rules (settings page) group more pages together, e.g. one Azure DevOps PR tab regardless of PR number.
   Per rule, when a match is open: **switch to it and open the new URL there** (default) or **just switch to it**.
@@ -68,8 +70,10 @@ The settings page has a "Test a URL" box that shows which rule matches.
 
 ## Online rulesets
 
-Add a URL to a JSON file in settings, e.g. the Azure DevOps ruleset in this repo:
-`https://raw.githubusercontent.com/MarthinusBosman/tab-dedupe/main/rulesets/azure-devops.json`.
+Every install subscribes to the two default rulesets in this repo (copies ship with the extension, so they work
+before the first download): `rulesets/default_ruleset.json` (rules) and `rulesets/default_wrappers.json` (link
+wrappers). Every entry can be switched off individually in settings, and either ruleset can be removed. Add more
+by URL in settings.
 Rulesets are welcome as pull requests under `rulesets/`.
 
 A ruleset is refreshed every 24 hours (configurable), or with **Refresh now**.
@@ -86,7 +90,19 @@ switched off individually.
 }
 ```
 
-Use `pattern` for one pattern or `patterns` for several. `onMatch`: `navigate` (default) or `switch`. Hosts without open CORS headers (GitHub raw and gists are fine)
+Use `pattern` for one pattern or `patterns` for several. `onMatch`: `navigate` (default) or `switch`.
+
+Link wrappers go in an `unwrap` list: a pattern for the redirect page and the query parameter holding the real link.
+
+```json
+{
+  "name": "Default link wrappers",
+  "unwrap": [
+    { "name": "Microsoft Safe Links (Teams)", "pattern": "**/safelinks/*/atp-safelinks.html", "param": "url" },
+    { "name": "Microsoft Safe Links (Outlook)", "pattern": "*.safelinks.protection.outlook.com", "param": "url" }
+  ]
+}
+``` Hosts without open CORS headers (GitHub raw and gists are fine)
 need host permission, which the settings page asks for when you add the URL.
 
 ## Development

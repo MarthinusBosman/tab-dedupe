@@ -63,6 +63,18 @@
   .rs-rule .act { font-size: 12.5px; color: var(--faint); }
   .rs-rule.off > div { opacity: .55; }
   .num { width: 64px; text-align: right; }
+  .wrapper { display: grid; grid-template-columns: auto minmax(0, 1fr) 150px auto; gap: 16px; align-items: center; padding: 10px 12px 10px 20px; }
+  .wrapper .fields { display: grid; gap: 1px; }
+  .wrapper .fields input, .wrapper .param input { border-color: transparent; background: transparent; min-height: 28px; padding: 2px 8px; width: 100%; }
+  .wrapper .fields input { margin-left: -9px; }
+  .wrapper input:hover { border-color: var(--field-border); }
+  .wrapper input:focus { border-color: var(--accent); background: var(--field); }
+  .wrapper .name { font-weight: 600; }
+  .wrapper .pat { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .wrapper .param { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
+  .wrapper .param input { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+  .wrapper.off .fields, .wrapper.off .param { opacity: .55; }
+  .tag { font-size: 11.5px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 0 8px; margin-left: 8px; vertical-align: 1px; }
   .row select { width: 268px; flex: none; }
   footer { margin-top: 40px; color: var(--faint); font-size: 12.5px; display: flex; gap: 16px; }
 </style>
@@ -135,6 +147,17 @@
   </section>
 
   <section>
+    <h2>Link wrappers</h2>
+    <p class="intro">Some apps open links through a redirect page first, such as Microsoft Safe Links in Teams and
+      Outlook. A link wrapper says where the real link is, so the tab you already have open is found straight away.
+      The default wrappers come from the online rulesets below; add your own here.</p>
+    <div class="card">
+      <div id="wrappers"></div>
+      <div class="card-actions"><button id="addWrapper" class="subtle"><svg class="i" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add link wrapper</button></div>
+    </div>
+  </section>
+
+  <section>
     <h2>Behaviour</h2>
     <div class="card">
       <div class="row">
@@ -168,6 +191,14 @@
           <option value="separate">Separate duplicates by group</option>
           <option value="ignore">Ignore groups</option>
         </select>
+      </div>
+      <div class="row">
+        <div class="text">
+          <label for="followRedirects">Follow new tabs through redirects</label>
+          <div class="desc">Keeps checking a new tab for a few seconds while it's redirected (sign-in pages, link
+            scanners without a link wrapper), and stops as soon as you navigate it yourself.</div>
+        </div>
+        <input type="checkbox" class="switch" id="followRedirects">
       </div>
       <div class="row">
         <div class="text">

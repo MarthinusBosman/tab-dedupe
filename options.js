@@ -1,4 +1,4 @@
-import { getSettings, saveSettings, getRulesets, getAllRules } from "./lib/store.js";
+import { getSettings, saveSettings, getRulesets, getAllRules, DEFAULT_RULESETS } from "./lib/store.js";
 import { keyFor, patternWarning, exportRules, importRules } from "./lib/rules.js";
 
 const $ = (id) => document.getElementById(id);
@@ -88,18 +88,61 @@ function renderRules(focusIndex) {
   });
 }
 
+let saveWrappersTimer;
+const saveWrappersSoon = () => {
+  clearTimeout(saveWrappersTimer);
+  saveWrappersTimer = setTimeout(() => saveSettings({ wrappers: settings.wrappers }).then(updateCount).then(runTest), 300);
+};
+
+function renderWrappers(focusIndex) {
+  const box = $("wrappers");
+  box.replaceChildren();
+  if (!settings.wrappers.length) {
+    box.append(el("div", { className: "empty", textContent: "No link wrappers of your own. The defaults are listed under Online rulesets." }));
+  }
+  settings.wrappers.forEach((w, i) => {
+    const row = el("div", { className: `wrapper${w.enabled === false ? " off" : ""}` });
+    const name = el("input", { type: "text", className: "name", value: w.name || "", placeholder: "Wrapper name", ariaLabel: "Wrapper name",
+      oninput: (e) => { w.name = e.target.value; saveWrappersSoon(); } });
+    row.append(
+      el("input", { type: "checkbox", className: "switch", checked: w.enabled !== false, title: "Wrapper on/off",
+        onchange: (e) => { w.enabled = e.target.checked; row.classList.toggle("off", !w.enabled); saveWrappersSoon(); } }),
+      el("div", { className: "fields" }, name,
+        el("input", { type: "text", className: "pat", value: w.pattern || "", placeholder: "redirect.example.com/go", ariaLabel: "Pattern of the redirect page",
+          spellcheck: false, oninput: (e) => { w.pattern = e.target.value.trim(); saveWrappersSoon(); } })),
+      el("label", { className: "param", title: "Query parameter that holds the real link" }, "?",
+        el("input", { type: "text", value: w.param || "", placeholder: "url", ariaLabel: "Query parameter with the real link",
+          spellcheck: false, oninput: (e) => { w.param = e.target.value.trim(); saveWrappersSoon(); } }), "="),
+      el("div", { className: "tools" },
+        iconButton("trash", "Delete link wrapper", () => { settings.wrappers.splice(i, 1); saveWrappersSoon(); renderWrappers(); }, "danger")),
+    );
+    box.append(row);
+    if (i === focusIndex) setTimeout(() => name.focus());
+  });
+}
+
+$("addWrapper").onclick = () => {
+  settings.wrappers.push({ kind: "unwrap", id: `local-${crypto.randomUUID()}`, name: "", pattern: "", param: "url", enabled: true });
+  renderWrappers(settings.wrappers.length - 1);
+  saveWrappersSoon();
+};
+
 async function renderRulesets() {
   const rulesets = await getRulesets();
   const box = $("rulesets");
   box.replaceChildren();
   for (const url of settings.rulesetUrls) {
     const rs = rulesets[url] || { name: url, rules: [] };
-    const n = rs.rules.length;
-    const meta = `${n} rule${n === 1 ? "" : "s"} · ${rs.fetchedAt ? `updated ${new Date(rs.fetchedAt).toLocaleString()}` : "not downloaded yet"}`;
+    const nw = rs.rules.filter((r) => r.kind === "unwrap").length, nr = rs.rules.length - nw;
+    const parts = [];
+    if (nr || !nw) parts.push(`${nr} rule${nr === 1 ? "" : "s"}`);
+    if (nw) parts.push(`${nw} link wrapper${nw === 1 ? "" : "s"}`);
+    parts.push(rs.fetchedAt ? `updated ${new Date(rs.fetchedAt).toLocaleString()}` : rs.bundled ? "built-in copy, not downloaded yet" : "not downloaded yet");
+    const meta = parts.join(" · ");
     const block = el("div", { className: "ruleset" },
       el("div", { className: "rs-head" },
         el("div", { className: "text" },
-          el("div", { className: "name", textContent: rs.name }),
+          el("div", { className: "name" }, rs.name, url in DEFAULT_RULESETS ? el("span", { className: "tag", textContent: "Default" }) : null),
           el("div", { className: "desc", textContent: meta }),
           el("div", { className: "url", textContent: url }),
           rs.error && el("div", { className: "desc err", textContent: `Last refresh failed: ${rs.error}` })),
@@ -120,7 +163,8 @@ async function renderRulesets() {
           updateCount();
         } }),
         el("div", {}, el("div", { textContent: r.name }), el("code", { textContent: r.pattern })),
-        el("div", { className: "act", textContent: r.onMatch === "switch" ? "Just switch" : "Switch and open new URL" }));
+        el("div", { className: "act", textContent: r.kind === "unwrap" ? `Link wrapper · real link in ?${r.param}=`
+          : r.onMatch === "switch" ? "Just switch" : "Switch and open new URL" }));
       block.append(row);
     }
     box.append(block);
@@ -139,9 +183,11 @@ async function runTest() {
   if (!url) return out.replaceChildren();
   const k = keyFor(url, await getAllRules(await getSettings()));
   if (!k) return out.replaceChildren("Not a web page, so it's ignored.");
-  if (!k.rule) return out.replaceChildren("No rule matches, so only this exact URL counts as the same page.");
+  const via = k.unwrappedBy ? [el("span", { className: "pill", textContent: "Unwrapped" }),
+    el("span", { textContent: `by ${k.unwrappedBy.name || k.unwrappedBy.pattern} to ${k.realUrl}` }), el("br")] : [];
+  if (!k.rule) return out.replaceChildren(...via, "No rule matches, so only this exact URL counts as the same page.");
   const group = Object.entries(k.vars || {}).map(([n, v]) => `${n} ${decodeURIComponent(v)}`).join(", ");
-  out.replaceChildren(
+  out.replaceChildren(...via,
     el("span", { className: "pill", textContent: "Matches" }),
     el("b", { textContent: k.rule.name || k.rule.pattern }),
     el("span", { textContent: group ? `· one tab per ${group}` : "· one tab for all matching pages" }),
@@ -191,6 +237,7 @@ $("markers").onchange = async (e) => {
   }
   settings = await saveSettings({ markers: e.target.checked });
 };
+$("followRedirects").onchange = (e) => saveSettings({ followRedirects: e.target.checked });
 $("aggressive").onchange = async (e) => {
   $("excludeRow").hidden = !e.target.checked;
   settings = await saveSettings({ aggressive: e.target.checked });
@@ -206,11 +253,12 @@ $("aggressiveExclude").onchange = async (e) => {
 };
 
 $("exportRules").onclick = () => {
-  const json = JSON.stringify(exportRules(settings.rules), null, 2);
+  const json = JSON.stringify(exportRules(settings.rules, settings.wrappers), null, 2);
   const a = el("a", { href: URL.createObjectURL(new Blob([json + "\n"], { type: "application/json" })), download: "tab-dedupe-rules.json" });
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  $("ioStatus").textContent = `Exported ${settings.rules.length} rule${settings.rules.length === 1 ? "" : "s"}`;
+  const n = settings.rules.length + settings.wrappers.length;
+  $("ioStatus").textContent = `Exported ${n} entr${n === 1 ? "y" : "ies"}`;
 };
 $("importRules").onclick = () => $("importFile").click();
 $("importFile").onchange = async (e) => {
@@ -218,11 +266,12 @@ $("importFile").onchange = async (e) => {
   e.target.value = "";
   if (!file) return;
   try {
-    const { rules, added, skipped } = importRules(settings.rules, JSON.parse(await file.text()));
-    settings = await saveSettings({ rules });
+    const { rules, wrappers, added, skipped } = importRules(settings.rules, settings.wrappers, JSON.parse(await file.text()));
+    settings = await saveSettings({ rules, wrappers });
     renderRules();
+    renderWrappers();
     updateCount();
-    $("ioStatus").textContent = `Imported ${added} rule${added === 1 ? "" : "s"}` + (skipped ? `, skipped ${skipped} you already have` : "");
+    $("ioStatus").textContent = `Imported ${added} entr${added === 1 ? "y" : "ies"}` + (skipped ? `, skipped ${skipped} you already have` : "");
   } catch (err) {
     $("ioStatus").textContent = `Couldn't import: ${err.message}`;
   }
@@ -268,10 +317,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
   $("enabled").checked = !settings.paused;
   $("markers").checked = settings.markers && (await chrome.permissions.contains(ALL_SITES));
   $("refreshHours").value = settings.refreshHours;
+  $("followRedirects").checked = settings.followRedirects !== false;
   $("aggressive").checked = settings.aggressive;
   $("excludeRow").hidden = !settings.aggressive;
   $("aggressiveExclude").value = settings.aggressiveExclude.join(", ");
   renderRules();
+  renderWrappers();
   renderRulesets();
   updateCount();
 })();

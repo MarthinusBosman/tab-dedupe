@@ -9,4 +9,6 @@ export const EXTENSION_FILES = [
   "ui.css",
   "lib",
   "icons",
+  "rulesets/default_ruleset.json",
+  "rulesets/default_wrappers.json",
 ];

@@ -2,8 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeUrl, compilePattern, keyFor, decideNewTab, planDuplicates, validateRuleset, unwrapUrl,
-  rulePatterns, patternWarning, aggressiveRule, importRules, exportRules, upgradeBuiltInRules,
+  rulePatterns, patternWarning, aggressiveRule, importRules, exportRules,
 } from "../lib/rules.js";
+import fs from "node:fs";
+
+const shipped = (name) => JSON.parse(fs.readFileSync(new URL(`../rulesets/${name}`, import.meta.url)));
+// The shipped default link wrappers, as the extension loads them.
+const WRAPPERS = validateRuleset(shipped("default_wrappers.json"), "https://example/default_wrappers.json").rules;
 
 const PR_ONE = { id: "pr", pattern: "dev.azure.com/*/*/_git/*/pullrequest/*", onMatch: "navigate", enabled: true };
 const PR_PER_REPO = { id: "repo", pattern: "dev.azure.com/*/*/_git/{repo}/pullrequest/*", onMatch: "navigate", enabled: true };
@@ -198,36 +203,52 @@ test("planDuplicates per group mode", () => {
 const TEAMS_SAFE = (u) => `https://teams.public.onecdn.static.microsoft/evergreen-assets/safelinks/2/atp-safelinks.html?url=${encodeURIComponent(u)}&locale=en-gb&dest=https%3A%2F%2Fteams.microsoft.com`;
 const OUTLOOK_SAFE = (u) => `https://eur02.safelinks.protection.outlook.com/?url=${encodeURIComponent(u)}&data=05%7C02%7Cx&reserved=0`;
 
-test("unwrapUrl: Teams and Outlook Safe Links, everything else unchanged", () => {
-  assert.equal(unwrapUrl(TEAMS_SAFE(PR1)), PR1);
-  assert.equal(unwrapUrl(TEAMS_SAFE(PR1).replace("teams.public.onecdn.static.microsoft", "statics.teams.cdn.office.net")), PR1);
-  assert.equal(unwrapUrl(OUTLOOK_SAFE(PR1)), PR1);
-  assert.equal(unwrapUrl(PR1), PR1);
-  assert.equal(unwrapUrl("https://eur02.safelinks.protection.outlook.com/?url=javascript%3Aalert(1)"), "https://eur02.safelinks.protection.outlook.com/?url=javascript%3Aalert(1)");
-  assert.equal(unwrapUrl("https://example.com/atp-safelinks.html"), "https://example.com/atp-safelinks.html");
+test("shipped default_wrappers.json: two Safe Links wrappers", () => {
+  assert.equal(WRAPPERS.length, 2);
+  assert.ok(WRAPPERS.every((w) => w.kind === "unwrap" && w.param === "url"));
+});
+
+test("unwrapUrl: uses link-wrapper entries; nothing is unwrapped without them", () => {
+  assert.equal(unwrapUrl(TEAMS_SAFE(PR1), WRAPPERS).url, PR1);
+  assert.equal(unwrapUrl(TEAMS_SAFE(PR1), WRAPPERS).by.name, "Microsoft Safe Links (Teams)");
+  assert.equal(unwrapUrl(TEAMS_SAFE(PR1).replace("teams.public.onecdn.static.microsoft", "statics.teams.cdn.office.net"), WRAPPERS).url, PR1);
+  assert.equal(unwrapUrl(OUTLOOK_SAFE(PR1), WRAPPERS).url, PR1);
+  assert.equal(unwrapUrl(TEAMS_SAFE(PR1), []).url, TEAMS_SAFE(PR1)); // not built in
+  assert.equal(unwrapUrl(TEAMS_SAFE(PR1), WRAPPERS.map((w) => ({ ...w, enabled: false }))).url, TEAMS_SAFE(PR1));
+  assert.equal(unwrapUrl(PR1, WRAPPERS).url, PR1);
+  assert.equal(unwrapUrl(PR1, WRAPPERS).by, null);
+  const js = "https://eur02.safelinks.protection.outlook.com/?url=javascript%3Aalert(1)";
+  assert.equal(unwrapUrl(js, WRAPPERS).url, js); // only web URLs are unwrapped
+  assert.equal(unwrapUrl("https://example.com/atp-safelinks.html", WRAPPERS).url, "https://example.com/atp-safelinks.html");
+});
+
+test("a custom wrapper with another parameter name", () => {
+  const w = { kind: "unwrap", id: "g", name: "Google redirect", pattern: "www.google.com/url", param: "q", enabled: true };
+  assert.equal(unwrapUrl(`https://www.google.com/url?q=${encodeURIComponent(PR1)}&sa=D`, [w]).url, PR1);
+  assert.equal(keyFor(`https://www.google.com/url?q=${encodeURIComponent(PR1)}`, [PR_ONE, w]).key, keyFor(PR2, [PR_ONE, w]).key);
 });
 
 test("decideNewTab: a Safe Links tab is matched by its real URL", () => {
   const open = tab(1, PR1), n = tab(2, TEAMS_SAFE(PR1));
-  assert.deepEqual(decideNewTab(n, [open, n], [PR_ONE], DEFAULTS), { action: "switch", targetId: 1 });
+  assert.deepEqual(decideNewTab(n, [open, n], [PR_ONE, ...WRAPPERS], DEFAULTS), { action: "switch", targetId: 1 });
   const n2 = tab(3, OUTLOOK_SAFE(PR1 + "#discussion"));
-  assert.deepEqual(decideNewTab(n2, [open, n2], [], DEFAULTS), { action: "switch", targetId: 1 });
+  assert.deepEqual(decideNewTab(n2, [open, n2], WRAPPERS, DEFAULTS), { action: "switch", targetId: 1 });
+  assert.equal(decideNewTab(n2, [open, n2], [], DEFAULTS).action, "none");
 });
 
 test("decideNewTab: navigating through Safe Links loads the wrapped URL so the scan still runs", () => {
   const open = tab(1, PR1), n = tab(2, TEAMS_SAFE(PR2));
-  assert.deepEqual(decideNewTab(n, [open, n], [PR_ONE], DEFAULTS), { action: "navigate", targetId: 1, url: TEAMS_SAFE(PR2) });
+  assert.deepEqual(decideNewTab(n, [open, n], [PR_ONE, ...WRAPPERS], DEFAULTS), { action: "navigate", targetId: 1, url: TEAMS_SAFE(PR2) });
 });
 
 test("planDuplicates: a tab still on the Safe Links page counts as its real page", () => {
-  const p = planDuplicates([tab(1, PR1, { lastAccessed: 5 }), tab(2, TEAMS_SAFE(PR1), { lastAccessed: 1 })], [], {});
+  const p = planDuplicates([tab(1, PR1, { lastAccessed: 5 }), tab(2, TEAMS_SAFE(PR1), { lastAccessed: 1 })], WRAPPERS, {});
   assert.deepEqual(p.closeIds, [2]);
 });
 
-test("shipped rulesets/azure-devops.json is valid and matches real ADO URLs", async () => {
-  const fs = await import("node:fs");
-  const src = "https://raw.githubusercontent.com/x/y/main/rulesets/azure-devops.json";
-  const { rules } = validateRuleset(JSON.parse(fs.readFileSync(new URL("../rulesets/azure-devops.json", import.meta.url))), src);
+test("shipped rulesets/default_ruleset.json is valid and matches real ADO URLs", () => {
+  const src = "https://raw.githubusercontent.com/x/y/main/rulesets/default_ruleset.json";
+  const { rules } = validateRuleset(shipped("default_ruleset.json"), src);
   assert.equal(rules.length, 3);
   const k = (u) => keyFor(u, rules)?.key;
   assert.equal(k(`${ADO}/dbt/pullrequest/1?_a=files`), k(`${ADO}/other/pullrequest/2`));
@@ -294,14 +315,20 @@ test("aggressive rule: one tab per hostname, after other rules, with exclusions"
 // ---- export / import ----
 test("exportRules writes a ruleset file that validateRuleset/importRules read back", () => {
   const mine = [ADO_BOTH, { ...PR_SWITCH, name: "Switch only", enabled: false }];
-  const json = exportRules(mine);
+  const myWrappers = [{ kind: "unwrap", id: "w1", name: "Google", pattern: "www.google.com/url", param: "q", enabled: false }];
+  const json = exportRules(mine, myWrappers);
+  assert.deepEqual(json.unwrap, [{ name: "Google", pattern: "www.google.com/url", param: "q", enabled: false }]);
+  const backW = importRules([], [], json);
+  assert.equal(backW.wrappers.length, 1);
+  assert.equal(backW.wrappers[0].param, "q");
+  assert.equal(backW.wrappers[0].enabled, false);
   assert.equal(json.rules.length, 2);
   assert.deepEqual(json.rules[0].patterns, rulePatterns(ADO_BOTH));
   assert.equal(json.rules[1].pattern, PR_SWITCH.pattern);
   assert.equal(json.rules[1].enabled, false);
-  assert.equal(validateRuleset(json, "u").rules.length, 2);
-  const back = importRules([], json);
-  assert.equal(back.added, 2);
+  assert.equal(validateRuleset(json, "u").rules.length, 3); // 2 rules + 1 link wrapper
+  const back = importRules([], [], json);
+  assert.equal(back.added, 3);
   assert.deepEqual(back.rules.map((r) => rulePatterns(r)), mine.map((r) => rulePatterns(r)));
   assert.equal(back.rules[1].enabled, false);
   assert.equal(back.rules[1].onMatch, "switch");
@@ -309,25 +336,15 @@ test("exportRules writes a ruleset file that validateRuleset/importRules read ba
 
 test("importRules appends new rules and skips ones whose patterns already exist", () => {
   const existing = [{ ...PR_ONE, id: "keep-me", name: "mine" }];
-  const r = importRules(existing, { rules: [{ pattern: PR_ONE.pattern, name: "dup" }, { pattern: "x.com/*", name: "new" }, { nope: 1 }] });
+  const r = importRules(existing, [], { rules: [{ pattern: PR_ONE.pattern, name: "dup" }, { pattern: "x.com/*", name: "new" }, { nope: 1 }] });
   assert.equal(r.added, 1);
   assert.equal(r.skipped, 1);
   assert.deepEqual(r.rules.map((x) => x.name), ["mine", "new"]);
   assert.ok(r.rules[1].id.startsWith("local-"));
-  assert.throws(() => importRules(existing, { foo: 1 }));
-});
-
-// ---- built-in rule upgrade ----
-test("upgradeBuiltInRules: upgrades the untouched built-in PR rule only", () => {
-  const old = { id: "default-ado-pr", name: "Azure DevOps: one PR tab", pattern: "dev.azure.com/*/*/_git/*/pullrequest/*", onMatch: "navigate", enabled: true };
-  const up = upgradeBuiltInRules([old, PR_SWITCH]);
-  assert.equal(rulePatterns(up[0]).length, 2);
-  assert.ok(rulePatterns(up[0])[1].includes("visualstudio.com"));
-  assert.equal(up[1], PR_SWITCH);
-  const edited = { ...old, pattern: "dev.azure.com/m-kopa/*/_git/{repo}/pullrequest/*" };
-  assert.equal(upgradeBuiltInRules([edited])[0], edited);
-  const switchedOff = { ...old, enabled: false };
-  assert.equal(upgradeBuiltInRules([switchedOff])[0].enabled, false);
+  assert.throws(() => importRules(existing, [], { foo: 1 }));
+  const w = importRules([], WRAPPERS, shipped("default_wrappers.json"));
+  assert.equal(w.added, 0);
+  assert.equal(w.skipped, 2);
 });
 
 test("validateRuleset: accepts good rules, rejects junk, fills defaults", () => {
@@ -338,4 +355,7 @@ test("validateRuleset: accepts good rules, rejects junk, fills defaults", () => 
   assert.equal(r.rules[1].onMatch, "navigate");
   assert.equal(r.rules[0].id, "https://x/r.json#dev.azure.com/*");
   assert.throws(() => validateRuleset({ rules: "nope" }, "u"));
+  assert.throws(() => validateRuleset({ name: "neither" }, "u"));
+  const onlyWrappers = validateRuleset({ unwrap: [{ pattern: "a.com/go", param: "to" }, { pattern: "b.com/go" }] }, "u");
+  assert.deepEqual(onlyWrappers.rules.map((r) => [r.kind, r.param]), [["unwrap", "to"]]); // needs a param
 });

@@ -33,7 +33,7 @@ const server = http.createServer((req, res) => {
   }
   const u = new URL(req.url, BASE);
   if (u.pathname === "/redir") { res.writeHead(302, { location: u.searchParams.get("to") }); return res.end(); }
-  if (u.pathname.endsWith("/atp-safelinks.html") || u.pathname === "/jsredir") {
+  if (u.pathname.endsWith("/atp-safelinks.html") || u.pathname === "/jsredir" || u.pathname === "/go") {
     const to = u.searchParams.get("url") || u.searchParams.get("to");
     res.writeHead(200, { "content-type": "text/html" });
     return res.end(`<title>redirecting</title><script>setTimeout(() => location.replace(${JSON.stringify(to)}), 600)</script>`);
@@ -141,6 +141,11 @@ try {
   const PR = { id: "e2e-pr", name: "one PR tab", pattern: `127.0.0.1:${PORT}/pr/*`, onMatch: "navigate", enabled: true };
   const SW = { id: "e2e-sw", name: "switch", pattern: `127.0.0.1:${PORT}/sw/*`, onMatch: "switch", enabled: true };
   const REPO = { id: "e2e-repo", name: "per repo", pattern: `127.0.0.1:${PORT}/repo/{r}/pr/*`, onMatch: "navigate", enabled: true };
+  const defaults = await bg(`Promise.all([chrome.storage.sync.get("settings"), chrome.storage.local.get("rulesets")])
+    .then(([{settings}, {rulesets}]) => settings.rulesetUrls.map((u) => ({ u, n: rulesets?.[u]?.rules?.length || 0,
+      wrappers: (rulesets?.[u]?.rules || []).filter((r) => r.kind === "unwrap").length })))`);
+  check("default rulesets subscribed and available straight after install",
+    defaults.length === 2 && defaults.every((d) => d.n > 0) && defaults.some((d) => d.wrappers === 2), JSON.stringify(defaults));
   await setSettings({ rules: [PR, SW, REPO] });
   await sleep(11000); // let the start-up restore guard expire
 
@@ -280,6 +285,9 @@ try {
 
   // 16. links that arrive through redirects (Teams Safe Links, server redirects, script redirects)
   await closeAllWeb();
+  const DEFAULT_URLS = defaults.map((d) => d.u);
+  await setSettings({ rulesetUrls: DEFAULT_URLS }); // removed in step 13; re-adding works even if GitHub is unreachable
+  await evalIn(os_, "chrome.runtime.sendMessage({type: 'refreshRulesets'})");
   const X = `${BASE}/x/1`;
   await open(X); await sleep(1200);
   await open(`${BASE}/evergreen-assets/safelinks/2/atp-safelinks.html?url=${encodeURIComponent(X)}&locale=en-gb`); await sleep(1500);
@@ -297,6 +305,25 @@ try {
   await send("Page.navigate", { url: X, transitionType: "typed" }, ys); await sleep(1800);
   t = await webTabs();
   check("navigating a tab yourself to an open page is left alone", t.filter((x) => x.url === X).length === 2, JSON.stringify(t));
+
+  // 16b. your own link wrapper, other parameter name; redirect-following switched off so only the wrapper can catch it
+  await closeAllWeb();
+  await setSettings({ followRedirects: false, wrappers: [{ kind: "unwrap", id: "w-go", name: "test go", pattern: `127.0.0.1:${PORT}/go`, param: "to", enabled: true }] });
+  await open(X); await sleep(1200);
+  await open(`${BASE}/go?to=${encodeURIComponent(X)}`); await sleep(1500);
+  t = await webTabs();
+  check("own link wrapper (?to=): closed straight away", t.length === 1 && t[0].url === X, JSON.stringify(t));
+  await open(`${BASE}/jsredir?to=${encodeURIComponent(X)}`); await sleep(2500);
+  t = await webTabs();
+  check("redirect-following switched off: script redirect is not followed", t.filter((x) => x.url === X).length === 2, JSON.stringify(t));
+  const remoteWrapperIds = await bg(`chrome.storage.local.get("rulesets").then(({rulesets}) => Object.values(rulesets).flatMap((r) => r.rules).filter((r) => r.kind === "unwrap").map((r) => r.id))`);
+  await setSettings({ disabledRemote: remoteWrapperIds });
+  await closeAllWeb();
+  await open(X); await sleep(1200);
+  await open(`${BASE}/evergreen-assets/safelinks/2/atp-safelinks.html?url=${encodeURIComponent(X)}`); await sleep(2000);
+  t = await webTabs();
+  check("default wrappers switched off (and no following): Safe Links tab stays", t.filter((x) => x.url === X).length === 2, JSON.stringify(t));
+  await setSettings({ followRedirects: true, wrappers: [], disabledRemote: [] });
 
   // 17. one rule, two hosts, shared variable: 127.0.0.1 and localhost count as the same page
   await closeAllWeb();
@@ -337,7 +364,7 @@ try {
   await send("DOM.setFileInputFiles", { files: [importFile], nodeId }, os_); await sleep(1200);
   const imp = await evalIn(os_, `({ status: document.getElementById("ioStatus").textContent, rows: document.querySelectorAll("#rules .rule").length })`);
   const stored = await bg(`chrome.storage.sync.get("settings").then(({settings}) => settings.rules.find(r => r.name === "imported"))`);
-  check("import: adds new rules, skips ones already there", imp.rows === 5 && /Imported 1 rule, skipped 1/.test(imp.status)
+  check("import: adds new rules, skips ones already there", imp.rows === 5 && /Imported 1 entry, skipped 1/.test(imp.status)
     && stored?.pattern === "a.example/*\nb.example/*" && stored.enabled === false && stored.onMatch === "switch", JSON.stringify({ imp, stored }));
 
   // 20. popup renders
