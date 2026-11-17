@@ -49,6 +49,21 @@ matched too, e.g. `example.com/view?id={id}`.
 - `dev.azure.com/*/*/_git/*/pullrequest/*`: one PR tab in total
 - `dev.azure.com/*/*/_git/{repo}/pullrequest/*`: one PR tab per repo
 
+A rule can have several patterns, one per line, to treat different URLs as the same page. Variables are matched by
+name, so the same `{org}` can sit in the domain on one line and in the path on another:
+
+```
+dev.azure.com/{org}/{project}/_git/*/pullrequest/*
+{org}.visualstudio.com/{project}/_git/*/pullrequest/*
+```
+
+**Aggressive mode** (settings, off by default) adds a catch-all "one tab per site" rule after all other rules, so
+custom rules still win. A page on a site you already have open replaces that tab's page; list sites that should keep
+several tabs as exceptions.
+
+**Export / Import** (under the rules) saves your rules to a JSON file in the online-ruleset format, so an export
+can also be hosted and subscribed to. Import adds rules and skips ones you already have.
+
 The settings page has a "Test a URL" box that shows which rule matches.
 
 ## Online rulesets
@@ -65,13 +80,13 @@ switched off individually.
 {
   "name": "Azure DevOps",
   "rules": [
-    { "name": "One PR tab", "pattern": "dev.azure.com/*/*/_git/*/pullrequest/*", "onMatch": "navigate" },
+    { "name": "One PR tab", "patterns": ["dev.azure.com/*/*/_git/*/pullrequest/*", "*.visualstudio.com/*/_git/*/pullrequest/*"], "onMatch": "navigate" },
     { "name": "One board tab", "pattern": "dev.azure.com/*/*/_boards/board/**", "onMatch": "switch" }
   ]
 }
 ```
 
-`onMatch`: `navigate` (default) or `switch`. Hosts without open CORS headers (GitHub raw and gists are fine)
+Use `pattern` for one pattern or `patterns` for several. `onMatch`: `navigate` (default) or `switch`. Hosts without open CORS headers (GitHub raw and gists are fine)
 need host permission, which the settings page asks for when you add the URL.
 
 ## Development

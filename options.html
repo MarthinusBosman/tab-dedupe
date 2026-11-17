@@ -21,12 +21,19 @@
   .rule .fields input:hover { border-color: var(--field-border); }
   .rule .fields input:focus { border-color: var(--accent); background: var(--field); }
   .rule .name { font-weight: 600; }
-  .rule .pattern { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .rule .pattern { font-family: var(--mono); font-size: 13px; color: var(--muted); resize: none; overflow: hidden;
+    line-height: 20px; border: 1px solid transparent; background: transparent; border-radius: 6px;
+    padding: 2px 8px; margin-left: -9px; width: 100%; min-height: 26px; }
+  .rule .pattern:hover { border-color: var(--field-border); }
+  .rule .pattern:focus { outline: none; border-color: var(--accent); background: var(--field); color: var(--ink); }
+  .rule .warn { color: var(--danger); font-size: 12.5px; padding-top: 2px; }
   .rule select { width: 100%; }
   .rule .tools { display: flex; gap: 2px; }
   .rule.off .fields, .rule.off select { opacity: .55; }
   .empty { padding: 20px; color: var(--muted); }
-  .card-actions { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+  .card-actions { display: flex; align-items: center; gap: 4px; padding: 8px 12px; }
+  .card-actions .spacer { flex: 1; }
+  #ioStatus { font-size: 12.5px; color: var(--muted); margin-right: 8px; }
 
   /* Pattern help */
   details > summary { cursor: pointer; padding: 12px 20px; color: var(--accent); list-style: none; display: flex; align-items: center; gap: 8px; }
@@ -52,7 +59,7 @@
   .rs-head .name { font-weight: 600; }
   .rs-head .url { font-size: 12.5px; color: var(--faint); overflow-wrap: anywhere; }
   .rs-rule { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 8px 20px 8px 20px; }
-  .rs-rule code { background: none; padding: 0; color: var(--muted); font-size: 12.5px; }
+  .rs-rule code { background: none; padding: 0; color: var(--muted); font-size: 12.5px; display: block; white-space: pre-line; }
   .rs-rule .act { font-size: 12.5px; color: var(--faint); }
   .rs-rule.off > div { opacity: .55; }
   .num { width: 64px; text-align: right; }
@@ -93,7 +100,14 @@
       slash and http/https. Rules group more pages together. They're tried top to bottom, before online rules.</p>
     <div class="card">
       <div id="rules"></div>
-      <div class="card-actions"><button id="addRule" class="subtle"><svg class="i" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add rule</button></div>
+      <div class="card-actions">
+        <button id="addRule" class="subtle"><svg class="i" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add rule</button>
+        <span class="spacer"></span>
+        <span id="ioStatus"></span>
+        <button id="exportRules" class="subtle" title="Save your rules to a JSON file">Export</button>
+        <button id="importRules" class="subtle" title="Add rules from an exported file or ruleset">Import</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
       <details>
         <summary><svg class="i" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg>How patterns work</summary>
         <div class="help">
@@ -102,6 +116,10 @@
             <dt><code>**</code></dt><dd>ignore anything, including slashes</dd>
             <dt><code>{name}</code></dt><dd>one tab per value of this part</dd>
           </dl>
+          <p>Put several patterns on separate lines to treat different URLs as the same page. Variables are matched by
+            name, so the same <code>{org}</code> can be in the domain on one line and in the path on another:<br>
+            <code>dev.azure.com/{org}/{project}/_git/*/pullrequest/*</code><br>
+            <code>{org}.visualstudio.com/{project}/_git/*/pullrequest/*</code></p>
           <p>Anything after the pattern (more path, the query string, #fragment) is ignored, unless the pattern contains
             <code>?</code>; then the query is matched too.</p>
           <p><code>dev.azure.com/*/*/_git/*/pullrequest/*</code> keeps one pull-request tab.<br>
@@ -150,6 +168,21 @@
           <option value="separate">Separate duplicates by group</option>
           <option value="ignore">Ignore groups</option>
         </select>
+      </div>
+      <div class="row">
+        <div class="text">
+          <label for="aggressive">Aggressive: one tab per site</label>
+          <div class="desc">Any page on a site you already have open replaces that tab's page, unless a rule above says
+            otherwise. Unsaved text in that tab is lost, and Close duplicates leaves one tab per site.</div>
+        </div>
+        <input type="checkbox" class="switch" id="aggressive">
+      </div>
+      <div class="row" id="excludeRow" hidden>
+        <div class="text">
+          <label for="aggressiveExclude">Sites that can have several tabs</label>
+          <div class="desc">Hostnames, separated by commas. Subdomains are included.</div>
+        </div>
+        <input type="text" id="aggressiveExclude" placeholder="mail.google.com, github.com" style="width: 268px">
       </div>
       <div class="row">
         <div class="text">

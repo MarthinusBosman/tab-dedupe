@@ -103,3 +103,4 @@ input.switch.small:checked::after { transform: translateX(16px); }
 .card > * + *, #rules > * + *, #rulesets > * + *, .ruleset > * + * { border-top: 1px solid var(--divider); }
 .row .text { flex: 1; min-width: 0; }
 .desc { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+[hidden] { display: none !important; }

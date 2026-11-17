@@ -298,7 +298,49 @@ try {
   t = await webTabs();
   check("navigating a tab yourself to an open page is left alone", t.filter((x) => x.url === X).length === 2, JSON.stringify(t));
 
-  // 17. popup renders
+  // 17. one rule, two hosts, shared variable: 127.0.0.1 and localhost count as the same page
+  await closeAllWeb();
+  const HOSTS = { id: "e2e-hosts", name: "two hosts", enabled: true, onMatch: "navigate",
+    pattern: `127.0.0.1:${PORT}/mh/{n}/*\nlocalhost:${PORT}/mh/{n}/*` };
+  await setSettings({ rules: [PR, SW, REPO, HOSTS] });
+  await open(`${BASE}/mh/a/1`); await sleep(1200);
+  await open(`http://localhost:${PORT}/mh/a/2`); await sleep(1800);
+  await open(`http://localhost:${PORT}/mh/b/1`); await sleep(1800);
+  t = (await tabs()).filter((x) => x.url.includes("/mh/"));
+  check("rule with two hosts: one tab per {n} across both hosts", t.length === 2 && t.some((x) => x.url === `http://localhost:${PORT}/mh/a/2`) && t.some((x) => x.url.endsWith("/mh/b/1")), JSON.stringify(t));
+
+  // 18. aggressive mode: one tab per site, custom rules still win, exclusions work
+  await closeAllWeb();
+  await setSettings({ aggressive: true, aggressiveExclude: [] });
+  await open(`${BASE}/q/1`); await sleep(1200);
+  await open(`${BASE}/q/2?x=1`); await sleep(1800);
+  t = await webTabs();
+  check("aggressive: second page on the same site replaces the first tab's page", t.length === 1 && t[0].url === `${BASE}/q/2?x=1`, JSON.stringify(t));
+  await open(`${BASE}/sw/1`); await sleep(1200);
+  await open(`${BASE}/sw/2`); await sleep(1800);
+  t = await webTabs(`${BASE}/sw/`);
+  check("aggressive: a custom 'just switch' rule still wins", t.length === 1 && t[0].url.endsWith("/sw/1"), JSON.stringify(t));
+  await setSettings({ aggressiveExclude: ["127.0.0.1"] });
+  await open(`${BASE}/q/3`); await sleep(1800);
+  check("aggressive: excluded host can have several tabs", (await webTabs(`${BASE}/q/`)).length === 2);
+  await setSettings({ aggressive: false });
+
+  // 19. import rules through the settings page's file input
+  const importFile = path.join(WORK, "import.json");
+  fs.writeFileSync(importFile, JSON.stringify({ name: "x", rules: [
+    { name: "imported", patterns: ["a.example/*", "b.example/*"], onMatch: "switch", enabled: false },
+    { name: "already there", pattern: PR.pattern },
+  ] }));
+  await send("Page.reload", {}, os_); await sleep(1500);
+  const doc = await send("DOM.getDocument", {}, os_);
+  const { nodeId } = await send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: "#importFile" }, os_);
+  await send("DOM.setFileInputFiles", { files: [importFile], nodeId }, os_); await sleep(1200);
+  const imp = await evalIn(os_, `({ status: document.getElementById("ioStatus").textContent, rows: document.querySelectorAll("#rules .rule").length })`);
+  const stored = await bg(`chrome.storage.sync.get("settings").then(({settings}) => settings.rules.find(r => r.name === "imported"))`);
+  check("import: adds new rules, skips ones already there", imp.rows === 5 && /Imported 1 rule, skipped 1/.test(imp.status)
+    && stored?.pattern === "a.example/*\nb.example/*" && stored.enabled === false && stored.onMatch === "switch", JSON.stringify({ imp, stored }));
+
+  // 20. popup renders
   const pop = (await send("Target.createTarget", { url: `chrome-extension://${extId}/popup.html` })).targetId;
   await sleep(1200);
   const ps = await attachPage(pop);

@@ -4,19 +4,28 @@
     {
       "id": "ado-pr",
       "name": "One pull request tab",
-      "pattern": "dev.azure.com/*/*/_git/*/pullrequest/*",
+      "patterns": [
+        "dev.azure.com/*/*/_git/*/pullrequest/*",
+        "*.visualstudio.com/*/_git/*/pullrequest/*"
+      ],
       "onMatch": "navigate"
     },
     {
       "id": "ado-work-item",
       "name": "One work item tab",
-      "pattern": "dev.azure.com/*/*/_workitems/edit/*",
+      "patterns": [
+        "dev.azure.com/*/*/_workitems/edit/*",
+        "*.visualstudio.com/*/_workitems/edit/*"
+      ],
       "onMatch": "navigate"
     },
     {
       "id": "ado-build",
       "name": "One pipeline run tab",
-      "pattern": "dev.azure.com/*/*/_build/results",
+      "patterns": [
+        "dev.azure.com/*/*/_build/results",
+        "*.visualstudio.com/*/_build/results"
+      ],
       "onMatch": "navigate"
     }
   ]

@@ -1,5 +1,5 @@
 import { getSettings, saveSettings, getRulesets, getAllRules } from "./lib/store.js";
-import { keyFor } from "./lib/rules.js";
+import { keyFor, patternWarning, exportRules, importRules } from "./lib/rules.js";
 
 const $ = (id) => document.getElementById(id);
 const ALL_SITES = { origins: ["<all_urls>"] };
@@ -57,15 +57,26 @@ function renderRules(focusIndex) {
       renderRules();
     };
     const row = el("div", { className: `rule${r.enabled === false ? " off" : ""}` });
+    const warn = el("div", { className: "warn", textContent: patternWarning(r) || "", hidden: !patternWarning(r) });
+    const pattern = el("textarea", { className: "pattern", value: r.pattern, placeholder: "example.com/docs/*  (one pattern per line)",
+      ariaLabel: "URL patterns, one per line", spellcheck: false, rows: 1 });
+    const fit = () => { pattern.style.height = "auto"; pattern.style.height = `${pattern.scrollHeight + 2}px`; };
+    pattern.oninput = () => {
+      r.pattern = pattern.value.split("\n").map((l) => l.trim()).join("\n");
+      const w = patternWarning(r);
+      warn.textContent = w || "";
+      warn.hidden = !w;
+      fit();
+      saveRulesSoon();
+    };
+    requestAnimationFrame(fit);
     const nameInput = el("input", { type: "text", className: "name", value: r.name || "", placeholder: "Rule name", ariaLabel: "Rule name",
       oninput: (e) => { r.name = e.target.value; saveRulesSoon(); } });
     row.append(
       el("input", { type: "checkbox", className: "switch", checked: r.enabled !== false, title: "Rule on/off",
         onchange: (e) => { r.enabled = e.target.checked; row.classList.toggle("off", !r.enabled); saveRulesSoon(); } }),
       el("div", { className: "fields" },
-        nameInput,
-        el("input", { type: "text", className: "pattern", value: r.pattern, placeholder: "example.com/docs/*", ariaLabel: "URL pattern",
-          spellcheck: false, oninput: (e) => { r.pattern = e.target.value.trim(); saveRulesSoon(); } })),
+        nameInput, pattern, warn),
       onMatchSelect(r.onMatch || "navigate", (v) => { r.onMatch = v; saveRulesSoon(); }),
       el("div", { className: "tools" },
         Object.assign(iconButton("up", "Move up", () => move(-1)), { disabled: i === 0 }),
@@ -129,11 +140,11 @@ async function runTest() {
   const k = keyFor(url, await getAllRules(await getSettings()));
   if (!k) return out.replaceChildren("Not a web page, so it's ignored.");
   if (!k.rule) return out.replaceChildren("No rule matches, so only this exact URL counts as the same page.");
-  const group = k.key.slice(`rule:${k.rule.id}:`.length);
+  const group = Object.entries(k.vars || {}).map(([n, v]) => `${n} ${decodeURIComponent(v)}`).join(", ");
   out.replaceChildren(
     el("span", { className: "pill", textContent: "Matches" }),
     el("b", { textContent: k.rule.name || k.rule.pattern }),
-    el("span", { textContent: group ? `· one tab for ${group}` : "· one tab for all matching pages" }),
+    el("span", { textContent: group ? `· one tab per ${group}` : "· one tab for all matching pages" }),
     el("span", { textContent: k.rule.onMatch === "switch" ? "· just switches" : "· switches and opens the new URL" }),
   );
 }
@@ -180,6 +191,43 @@ $("markers").onchange = async (e) => {
   }
   settings = await saveSettings({ markers: e.target.checked });
 };
+$("aggressive").onchange = async (e) => {
+  $("excludeRow").hidden = !e.target.checked;
+  settings = await saveSettings({ aggressive: e.target.checked });
+  updateCount();
+  runTest();
+};
+$("aggressiveExclude").onchange = async (e) => {
+  const hosts = e.target.value.split(/[\s,]+/).map((h) => h.trim().toLowerCase()).filter(Boolean);
+  e.target.value = hosts.join(", ");
+  settings = await saveSettings({ aggressiveExclude: hosts });
+  updateCount();
+  runTest();
+};
+
+$("exportRules").onclick = () => {
+  const json = JSON.stringify(exportRules(settings.rules), null, 2);
+  const a = el("a", { href: URL.createObjectURL(new Blob([json + "\n"], { type: "application/json" })), download: "tab-dedupe-rules.json" });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  $("ioStatus").textContent = `Exported ${settings.rules.length} rule${settings.rules.length === 1 ? "" : "s"}`;
+};
+$("importRules").onclick = () => $("importFile").click();
+$("importFile").onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const { rules, added, skipped } = importRules(settings.rules, JSON.parse(await file.text()));
+    settings = await saveSettings({ rules });
+    renderRules();
+    updateCount();
+    $("ioStatus").textContent = `Imported ${added} rule${added === 1 ? "" : "s"}` + (skipped ? `, skipped ${skipped} you already have` : "");
+  } catch (err) {
+    $("ioStatus").textContent = `Couldn't import: ${err.message}`;
+  }
+};
+
 $("refreshHours").onchange = (e) => saveSettings({ refreshHours: Math.max(1, Number(e.target.value) || 24) });
 
 $("addRs").onclick = async () => {
@@ -220,6 +268,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   $("enabled").checked = !settings.paused;
   $("markers").checked = settings.markers && (await chrome.permissions.contains(ALL_SITES));
   $("refreshHours").value = settings.refreshHours;
+  $("aggressive").checked = settings.aggressive;
+  $("excludeRow").hidden = !settings.aggressive;
+  $("aggressiveExclude").value = settings.aggressiveExclude.join(", ");
   renderRules();
   renderRulesets();
   updateCount();

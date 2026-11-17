@@ -67,7 +67,11 @@ Decide what "the same page" means with simple URL rules:
   dev.azure.com/*/*/_git/*/pullrequest/* keeps a single Azure DevOps pull-request tab, and
   dev.azure.com/*/*/_git/{repo}/pullrequest/* keeps one per repository.
 - For each rule, choose whether the existing tab switches to the newly opened URL or just comes to the front.
-- Subscribe to online rulesets (JSON files, for example on GitHub) that refresh automatically.
+- Give a rule several URL patterns to treat different addresses as the same page, e.g. dev.azure.com and
+  visualstudio.com links to the same pull request.
+- Subscribe to online rulesets (JSON files, for example on GitHub) that refresh automatically, and export/import
+  your own rules.
+- Optional aggressive mode: one tab per site, with exceptions.
 
 Also included:
 - "Close duplicates now" closes all but the most recently used tab in each group.

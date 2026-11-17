@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeUrl, compilePattern, keyFor, decideNewTab, planDuplicates, validateRuleset, unwrapUrl,
+  rulePatterns, patternWarning, aggressiveRule, importRules, exportRules, upgradeBuiltInRules,
 } from "../lib/rules.js";
 
 const PR_ONE = { id: "pr", pattern: "dev.azure.com/*/*/_git/*/pullrequest/*", onMatch: "navigate", enabled: true };
@@ -38,7 +39,7 @@ test("pattern accepts an explicit scheme and is case-insensitive", () => {
 
 test("pattern with ? matches against the query", () => {
   const p = compilePattern("example.com/view?id={id}");
-  assert.deepEqual(p.match("https://example.com/view?id=7&x=1"), ["7"]);
+  assert.deepEqual(p.match("https://example.com/view?id=7&x=1"), { id: "7" });
   assert.equal(p.match("https://example.com/view"), null);
 });
 
@@ -234,6 +235,99 @@ test("shipped rulesets/azure-devops.json is valid and matches real ADO URLs", as
   assert.equal(k("https://dev.azure.com/m-kopa/Proj/_build/results?buildId=1&view=logs"), k("https://dev.azure.com/m-kopa/Proj/_build/results?buildId=2"));
   assert.notEqual(k(`${ADO}/dbt/pullrequest/1`), k("https://dev.azure.com/m-kopa/Proj/_workitems/edit/1"));
   assert.equal(keyFor(`${ADO}/dbt/pullrequests`, rules).rule, null);
+  // visualstudio.com form of the same pages
+  assert.equal(k("https://m-kopa.visualstudio.com/Proj/_git/dbt/pullrequest/9"), k(`${ADO}/other/pullrequest/2`));
+  assert.equal(k("https://m-kopa.visualstudio.com/Proj/_workitems/edit/5"), k("https://dev.azure.com/m-kopa/Proj/_workitems/edit/2"));
+  assert.equal(k("https://m-kopa.visualstudio.com/Proj/_build/results?buildId=3"), k("https://dev.azure.com/m-kopa/Proj/_build/results?buildId=2"));
+});
+
+// ---- several patterns per rule, named variables ----
+const VS = "https://m-kopa.visualstudio.com/Data%20Services/_git";
+const ADO_BOTH = { id: "both", enabled: true, onMatch: "navigate",
+  pattern: "dev.azure.com/{org}/{project}/_git/*/pullrequest/*\n{org}.visualstudio.com/{project}/_git/*/pullrequest/*" };
+
+test("rulePatterns: newline-separated string or patterns array", () => {
+  assert.deepEqual(rulePatterns({ pattern: " a.com/* \n\n b.com/* " }), ["a.com/*", "b.com/*"]);
+  assert.deepEqual(rulePatterns({ patterns: ["a.com/*", "b.com/*"] }), ["a.com/*", "b.com/*"]);
+});
+
+test("multi-pattern rule: variables match by name across host and path", () => {
+  const k = (u) => keyFor(u, [ADO_BOTH]).key;
+  assert.equal(k(`${ADO}/dbt/pullrequest/1`), k(`${VS}/other/pullrequest/2`));
+  assert.equal(k(`${ADO}/dbt/pullrequest/1`), k("https://m-kopa.visualstudio.com/Data Services/_git/x/pullrequest/3"));
+  assert.notEqual(k(`${ADO}/dbt/pullrequest/1`), k("https://dev.azure.com/m-kopa/Other/_git/x/pullrequest/1"));
+  assert.notEqual(k(`${ADO}/dbt/pullrequest/1`), k("https://acme.visualstudio.com/Data%20Services/_git/x/pullrequest/1"));
+  assert.equal(keyFor(`${VS}/x/pullrequest/1`, [ADO_BOTH]).rule.id, "both");
+});
+
+test("multi-pattern rule without variables groups both hosts into one tab", () => {
+  const r = { id: "one", enabled: true, onMatch: "navigate", pattern: "dev.azure.com/*/*/_git/*/pullrequest/*\n*.visualstudio.com/*/_git/*/pullrequest/*" };
+  assert.equal(keyFor(`${ADO}/a/pullrequest/1`, [r]).key, keyFor(`${VS}/b/pullrequest/2`, [r]).key);
+});
+
+test("decideNewTab: rule spanning two hosts switches to the tab on the other host", () => {
+  const tabs = [tab(1, `${VS}/dbt/pullrequest/1`), tab(2, `${ADO}/x/pullrequest/2`)];
+  assert.deepEqual(decideNewTab(tabs[1], tabs, [ADO_BOTH], DEFAULTS), { action: "navigate", targetId: 1, url: `${ADO}/x/pullrequest/2` });
+});
+
+test("patternWarning: lines with different variable names", () => {
+  assert.equal(patternWarning(ADO_BOTH), null);
+  assert.match(patternWarning({ pattern: "a.com/{x}\nb.com/{y}" }), /same variables/);
+  assert.equal(patternWarning({ pattern: "a.com/*" }), null);
+});
+
+// ---- aggressive mode ----
+test("aggressive rule: one tab per hostname, after other rules, with exclusions", () => {
+  const agg = aggressiveRule(["mail.example.com", "github.com"]);
+  const rules = [PR_PER_REPO, agg];
+  const k = (u) => keyFor(u, rules);
+  assert.equal(k("https://example.com/a").key, k("https://example.com/b?q=1").key);
+  assert.equal(k("https://example.com/a").rule.id, agg.id);
+  assert.notEqual(k("https://example.com/a").key, k("https://docs.example.com/a").key);
+  assert.equal(k(`${ADO}/dbt/pullrequest/1`).rule.id, "repo"); // custom rules still win
+  assert.equal(k("https://mail.example.com/inbox").rule, null); // excluded: exact URL again
+  assert.equal(k("https://gist.github.com/x").rule, null); // subdomains of excluded hosts too
+  const tabs = [tab(1, "https://example.com/a"), tab(2, "https://example.com/b")];
+  assert.deepEqual(decideNewTab(tabs[1], tabs, rules, DEFAULTS), { action: "navigate", targetId: 1, url: "https://example.com/b" });
+});
+
+// ---- export / import ----
+test("exportRules writes a ruleset file that validateRuleset/importRules read back", () => {
+  const mine = [ADO_BOTH, { ...PR_SWITCH, name: "Switch only", enabled: false }];
+  const json = exportRules(mine);
+  assert.equal(json.rules.length, 2);
+  assert.deepEqual(json.rules[0].patterns, rulePatterns(ADO_BOTH));
+  assert.equal(json.rules[1].pattern, PR_SWITCH.pattern);
+  assert.equal(json.rules[1].enabled, false);
+  assert.equal(validateRuleset(json, "u").rules.length, 2);
+  const back = importRules([], json);
+  assert.equal(back.added, 2);
+  assert.deepEqual(back.rules.map((r) => rulePatterns(r)), mine.map((r) => rulePatterns(r)));
+  assert.equal(back.rules[1].enabled, false);
+  assert.equal(back.rules[1].onMatch, "switch");
+});
+
+test("importRules appends new rules and skips ones whose patterns already exist", () => {
+  const existing = [{ ...PR_ONE, id: "keep-me", name: "mine" }];
+  const r = importRules(existing, { rules: [{ pattern: PR_ONE.pattern, name: "dup" }, { pattern: "x.com/*", name: "new" }, { nope: 1 }] });
+  assert.equal(r.added, 1);
+  assert.equal(r.skipped, 1);
+  assert.deepEqual(r.rules.map((x) => x.name), ["mine", "new"]);
+  assert.ok(r.rules[1].id.startsWith("local-"));
+  assert.throws(() => importRules(existing, { foo: 1 }));
+});
+
+// ---- built-in rule upgrade ----
+test("upgradeBuiltInRules: upgrades the untouched built-in PR rule only", () => {
+  const old = { id: "default-ado-pr", name: "Azure DevOps: one PR tab", pattern: "dev.azure.com/*/*/_git/*/pullrequest/*", onMatch: "navigate", enabled: true };
+  const up = upgradeBuiltInRules([old, PR_SWITCH]);
+  assert.equal(rulePatterns(up[0]).length, 2);
+  assert.ok(rulePatterns(up[0])[1].includes("visualstudio.com"));
+  assert.equal(up[1], PR_SWITCH);
+  const edited = { ...old, pattern: "dev.azure.com/m-kopa/*/_git/{repo}/pullrequest/*" };
+  assert.equal(upgradeBuiltInRules([edited])[0], edited);
+  const switchedOff = { ...old, enabled: false };
+  assert.equal(upgradeBuiltInRules([switchedOff])[0].enabled, false);
 });
 
 test("validateRuleset: accepts good rules, rejects junk, fills defaults", () => {

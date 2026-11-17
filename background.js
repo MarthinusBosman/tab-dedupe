@@ -1,4 +1,4 @@
-import { decideNewTab, planDuplicates, tabUrl } from "./lib/rules.js";
+import { decideNewTab, planDuplicates, tabUrl, upgradeBuiltInRules } from "./lib/rules.js";
 import { getSettings, getAllRules, refreshRulesets, MARK, DEFAULT_SETTINGS } from "./lib/store.js";
 
 const WEB = /^https?:\/\//i;
@@ -206,6 +206,10 @@ chrome.alarms.onAlarm.addListener(async (a) => {
 chrome.runtime.onInstalled.addListener(async () => {
   const { settings } = await chrome.storage.sync.get("settings");
   if (!settings) await chrome.storage.sync.set({ settings: DEFAULT_SETTINGS });
+  else if (settings.rules) {
+    const rules = upgradeBuiltInRules(settings.rules);
+    if (JSON.stringify(rules) !== JSON.stringify(settings.rules)) await chrome.storage.sync.set({ settings: { ...settings, rules } });
+  }
   await ensureAlarm();
   scheduleRefresh();
 });
