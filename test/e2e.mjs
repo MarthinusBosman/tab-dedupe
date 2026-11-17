@@ -147,7 +147,11 @@ try {
   check("default rulesets subscribed and available straight after install",
     defaults.length === 2 && defaults.every((d) => d.n > 0) && defaults.some((d) => d.wrappers === 2), JSON.stringify(defaults));
   await setSettings({ rules: [PR, SW, REPO] });
-  await sleep(11000); // let the start-up restore guard expire
+  // Right after install/reload there's no start-up guard: duplicates are caught immediately.
+  await open(`${BASE}/fresh`); await sleep(800);
+  await open(`${BASE}/fresh`); await sleep(1200);
+  check("straight after install: a duplicate is caught immediately", (await webTabs(`${BASE}/fresh`)).length === 1);
+  await closeAllWeb();
 
   // 1. exact duplicate (ignoring #fragment) switches back to the existing tab
   await open(`${BASE}/a`); await sleep(1200);
@@ -324,6 +328,17 @@ try {
   t = await webTabs();
   check("default wrappers switched off (and no following): Safe Links tab stays", t.filter((x) => x.url === X).length === 2, JSON.stringify(t));
   await setSettings({ followRedirects: true, wrappers: [], disabledRemote: [] });
+
+  // 16c. the same link opened three times from another app (Edge records the tab you're on as the opener)
+  await closeAllWeb();
+  await setSettings({ openerSelf: "keepBoth" });
+  await open(`${BASE}/pr/1`); await sleep(1000);
+  const inbox = (await send("Target.createTarget", { url: `${BASE}/inbox` })).targetId; await sleep(1200);
+  await send("Target.activateTarget", { targetId: inbox }); await sleep(300);
+  for (let i = 0; i < 3; i++) { await send("Target.createTarget", { url: `${BASE}/pr/2` }); await sleep(1800); }
+  t = await webTabs(`${BASE}/pr/`);
+  check("same link 3x from another app: 1st replaces the PR tab, 2nd and 3rd open new tabs",
+    t.length === 3 && t.every((x) => x.url.endsWith("/pr/2")), JSON.stringify(t));
 
   // 17. one rule, two hosts, shared variable: 127.0.0.1 and localhost count as the same page
   await closeAllWeb();

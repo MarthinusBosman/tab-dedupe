@@ -18,7 +18,9 @@ async function setWatch(w) {
   await chrome.storage.session.set(w);
 }
 
-// Don't treat tabs restored at browser start-up as newly opened.
+// Don't treat tabs restored at browser start-up as newly opened. The first worker start of a browser session sets a
+// short guard; installing, updating or reloading the extension clears it (see onInstalled), since no tabs are being
+// restored then.
 let restoringUntil = 0;
 const booted = chrome.storage.session.get("booted").then(async ({ booted: b }) => {
   if (!b) {
@@ -206,6 +208,8 @@ chrome.alarms.onAlarm.addListener(async (a) => {
 });
 
 chrome.runtime.onInstalled.addListener(async () => {
+  await booted;
+  restoringUntil = 0;
   const { settings } = await chrome.storage.sync.get("settings");
   if (!settings) await chrome.storage.sync.set({ settings: DEFAULT_SETTINGS });
   else if (!settings.defaultsAdded) {

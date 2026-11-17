@@ -23,7 +23,7 @@ for (const f of EXTENSION_FILES) fs.cpSync(path.join(ROOT, f), path.join(EXT, f)
 const server = http.createServer((req, res) => {
   if (req.url === "/rules.json") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
-    return res.end(fs.readFileSync(path.join(ROOT, "rulesets", "azure-devops.json")));
+    return res.end(fs.readFileSync(path.join(ROOT, "rulesets", "default_ruleset.json")));
   }
   res.writeHead(200, { "content-type": "text/html" });
   res.end(`<title>${req.url}</title>`);

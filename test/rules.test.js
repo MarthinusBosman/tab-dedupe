@@ -101,11 +101,28 @@ test("decideNewTab: ctrl+click from the only matching tab keeps both by default"
   assert.equal(decideNewTab(tabs[1], tabs, [PR_ONE], { ...DEFAULTS, openerSelf: "applyRule" }).action, "navigate");
 });
 
-test("decideNewTab: ctrl+click from opener but another matching tab exists -> use the other", () => {
+test("decideNewTab: opened from a matching tab (ctrl+click) keeps both, even when other matches exist", () => {
   const tabs = [tab(1, `${ADO}/dbt/pullrequest/1`), tab(5, `${ADO}/y/pullrequest/9`, { lastAccessed: 0 }),
     tab(2, `${ADO}/x/pullrequest/2`, { openerTabId: 1 })];
-  assert.deepEqual(decideNewTab(tabs[2], tabs, [PR_ONE], DEFAULTS),
-    { action: "navigate", targetId: 5, url: `${ADO}/x/pullrequest/2` });
+  assert.deepEqual(decideNewTab(tabs[2], tabs, [PR_ONE], DEFAULTS), { action: "keep" });
+  assert.deepEqual(decideNewTab(tabs[2], tabs, [PR_ONE], { ...DEFAULTS, openerSelf: "applyRule" }),
+    { action: "navigate", targetId: 1, url: `${ADO}/x/pullrequest/2` });
+});
+
+test("decideNewTab: the same link opened three times in a row", () => {
+  // You're on an unrelated tab (9); a PR tab (1) is open in the background.
+  const other = tab(9, "https://example.com/inbox", { lastAccessed: 100 });
+  const pr = tab(1, PR1, { lastAccessed: 10 });
+  const first = tab(20, PR2, { openerTabId: 9 });
+  assert.deepEqual(decideNewTab(first, [other, pr, first], [PR_ONE], DEFAULTS), { action: "navigate", targetId: 1, url: PR2 });
+  // Tab 1 now shows PR2 and is the tab you're on; opening the link again comes "from" it: new tab.
+  const pr1now = { ...pr, url: PR2, lastAccessed: 200 };
+  const second = tab(21, PR2, { openerTabId: 1 });
+  assert.deepEqual(decideNewTab(second, [other, pr1now, second], [PR_ONE], DEFAULTS), { action: "keep" });
+  // You're now on tab 21; the third time comes from it, so tab 1 is not overwritten either.
+  const t21 = { ...second, lastAccessed: 300 };
+  const third = tab(22, PR2, { openerTabId: 21 });
+  assert.deepEqual(decideNewTab(third, [other, pr1now, t21, third], [PR_ONE], DEFAULTS), { action: "keep" });
 });
 
 test("decideNewTab: paused, pinned (ignore mode), incognito are ignored", () => {

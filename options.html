@@ -162,11 +162,12 @@
     <div class="card">
       <div class="row">
         <div class="text">
-          <label for="openerSelf">Ctrl+click from the matching tab</label>
-          <div class="desc">When you Ctrl+click a link (or duplicate a tab) and the only match is the tab you're in.</div>
+          <label for="openerSelf">Opening a match from the tab you're on</label>
+          <div class="desc">When the tab you're on is itself a match: Ctrl+click, Duplicate tab, or a link from another app
+            (Teams, a terminal) while you're on that tab. Opening the same link several times then gives several tabs.</div>
         </div>
         <select id="openerSelf">
-          <option value="keepBoth">Open the new tab anyway</option>
+          <option value="keepBoth">Open a new tab next to it</option>
           <option value="applyRule">Apply the rule as normal</option>
         </select>
       </div>
