@@ -59,7 +59,7 @@ function renderRules(focusIndex) {
     const row = el("div", { className: `rule${r.enabled === false ? " off" : ""}` });
     const warn = el("div", { className: "warn", textContent: patternWarning(r) || "", hidden: !patternWarning(r) });
     const pattern = el("textarea", { className: "pattern", value: r.pattern, placeholder: "example.com/docs/*  (one pattern per line)",
-      ariaLabel: "URL patterns, one per line", spellcheck: false, rows: 1 });
+      ariaLabel: "URL patterns, one per line", spellcheck: false, rows: 1, wrap: "off" });
     const fit = () => { pattern.style.height = "auto"; pattern.style.height = `${pattern.scrollHeight + 2}px`; };
     pattern.oninput = () => {
       r.pattern = pattern.value.split("\n").map((l) => l.trim()).join("\n");
@@ -238,6 +238,11 @@ $("markers").onchange = async (e) => {
   settings = await saveSettings({ markers: e.target.checked });
 };
 $("followRedirects").onchange = (e) => saveSettings({ followRedirects: e.target.checked });
+$("burstSeconds").onchange = (e) => {
+  const v = Math.min(120, Math.max(0, Math.round(Number(e.target.value) || 0)));
+  e.target.value = v;
+  saveSettings({ burstSeconds: v });
+};
 $("aggressive").onchange = async (e) => {
   $("excludeRow").hidden = !e.target.checked;
   settings = await saveSettings({ aggressive: e.target.checked });
@@ -318,6 +323,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   $("markers").checked = settings.markers && (await chrome.permissions.contains(ALL_SITES));
   $("refreshHours").value = settings.refreshHours;
   $("followRedirects").checked = settings.followRedirects !== false;
+  $("burstSeconds").value = settings.burstSeconds ?? 10;
   $("aggressive").checked = settings.aggressive;
   $("excludeRow").hidden = !settings.aggressive;
   $("aggressiveExclude").value = settings.aggressiveExclude.join(", ");

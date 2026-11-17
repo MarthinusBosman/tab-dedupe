@@ -24,10 +24,11 @@ it. The store version doesn't get this prompt.
 - Default "same page": same URL ignoring `#fragment`, trailing slash and http/https. The query string still counts.
 - Rules (settings page) group more pages together, e.g. one Azure DevOps PR tab regardless of PR number.
   Per rule, when a match is open: **switch to it and open the new URL there** (default) or **just switch to it**.
-- When the tab you're on is itself a match (Ctrl+click, "Duplicate tab", or a link from another app while you're on
-  that tab), a new tab opens next to it by default, so your current tab is never replaced and no other matching
-  tab is overwritten instead. Opening the same link three times: the first replaces or focuses the existing tab,
-  the next two open new tabs. Configurable.
+- Ctrl+click on a page that is itself a match opens a new tab next to it (configurable); "Duplicate tab" always
+  makes a copy.
+- Links from other apps (Teams, a terminal) always go to the tab you already have, even if you're on it. Several
+  links for the same page or rule within 10 seconds of each other (configurable) open as separate tabs: the first
+  goes to the existing tab, the rest open next to it.
 - **Close duplicates now** (popup and settings) closes all but the most recently used tab in each group.
 - Optional 🔁 prefix on duplicate tab titles (asks for the all-sites permission when switched on).
 - Pinned tabs (configurable): by default, opening a pinned page switches to the pinned tab without changing it.

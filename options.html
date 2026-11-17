@@ -21,7 +21,7 @@
   .rule .fields input:hover { border-color: var(--field-border); }
   .rule .fields input:focus { border-color: var(--accent); background: var(--field); }
   .rule .name { font-weight: 600; }
-  .rule .pattern { font-family: var(--mono); font-size: 13px; color: var(--muted); resize: none; overflow: hidden;
+  .rule .pattern { font-family: var(--mono); font-size: 13px; color: var(--muted); resize: none; overflow-y: hidden; overflow-x: auto; white-space: pre;
     line-height: 20px; border: 1px solid transparent; background: transparent; border-radius: 6px;
     padding: 2px 8px; margin-left: -9px; width: 100%; min-height: 26px; }
   .rule .pattern:hover { border-color: var(--field-border); }
@@ -63,7 +63,7 @@
   .rs-rule .act { font-size: 12.5px; color: var(--faint); }
   .rs-rule.off > div { opacity: .55; }
   .num { width: 64px; text-align: right; }
-  .wrapper { display: grid; grid-template-columns: auto minmax(0, 1fr) 150px auto; gap: 16px; align-items: center; padding: 10px 12px 10px 20px; }
+  .wrapper { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 16px; align-items: center; padding: 10px 12px 10px 20px; }
   .wrapper .fields { display: grid; gap: 1px; }
   .wrapper .fields input, .wrapper .param input { border-color: transparent; background: transparent; min-height: 28px; padding: 2px 8px; width: 100%; }
   .wrapper .fields input { margin-left: -9px; }
@@ -71,7 +71,8 @@
   .wrapper input:focus { border-color: var(--accent); background: var(--field); }
   .wrapper .name { font-weight: 600; }
   .wrapper .pat { font-family: var(--mono); font-size: 13px; color: var(--muted); }
-  .wrapper .param { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
+  .wrapper .param { display: flex; align-items: center; gap: 2px; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  .wrapper .param input { width: auto; field-sizing: content; min-width: 4ch; padding: 2px 4px; }
   .wrapper .param input { font-family: var(--mono); font-size: 13px; color: var(--ink); }
   .wrapper.off .fields, .wrapper.off .param { opacity: .55; }
   .tag { font-size: 11.5px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 0 8px; margin-left: 8px; vertical-align: 1px; }
@@ -162,14 +163,22 @@
     <div class="card">
       <div class="row">
         <div class="text">
-          <label for="openerSelf">Opening a match from the tab you're on</label>
-          <div class="desc">When the tab you're on is itself a match: Ctrl+click, Duplicate tab, or a link from another app
-            (Teams, a terminal) while you're on that tab. Opening the same link several times then gives several tabs.</div>
+          <label for="openerSelf">Ctrl+click from the matching tab</label>
+          <div class="desc">When you Ctrl+click a link on a page that is itself a match. "Duplicate tab" always makes a copy.</div>
         </div>
         <select id="openerSelf">
           <option value="keepBoth">Open a new tab next to it</option>
           <option value="applyRule">Apply the rule as normal</option>
         </select>
+      </div>
+      <div class="row">
+        <div class="text">
+          <label for="burstSeconds">Links opened in quick succession</label>
+          <div class="desc">Links from other apps (Teams, a terminal) for the same page or rule, opened within this many
+            seconds of each other, open as separate tabs. The first one still goes to the tab you already have. 0 turns
+            this off.</div>
+        </div>
+        <span><input type="number" class="num" id="burstSeconds" min="0" max="120"> seconds</span>
       </div>
       <div class="row">
         <div class="text">

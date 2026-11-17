@@ -1,4 +1,4 @@
-import { decideNewTab, planDuplicates, tabUrl } from "./lib/rules.js";
+import { decideNewTab, planDuplicates, tabUrl, keyFor } from "./lib/rules.js";
 import { getSettings, getAllRules, refreshRulesets, seedBundledRulesets, MARK, DEFAULT_SETTINGS, DEFAULT_RULESETS } from "./lib/store.js";
 
 const WEB = /^https?:\/\//i;
@@ -29,8 +29,35 @@ const booted = chrome.storage.session.get("booted").then(async ({ booted: b }) =
   }
 });
 
-/** Returns true if the tab was handled (switched/navigated and closed). */
-async function handleNewTab(tab, url) {
+// ---- how a tab was opened --------------------------------------------------------------------------------------
+// "page": Ctrl+click / link on a page (webNavigation.onCreatedNavigationTarget fires a few ms after the tab).
+// "duplicate": Duplicate tab (same URL as its opener, first load reported as "reload").
+// "elsewhere": another app (Teams, a terminal: Edge records the tab you're on as opener, load type "auto_toplevel"),
+//              a typed URL, anything else.
+const navTargets = new Set(); // tabs opened from a page
+const firstCommit = new Map(); // tabId -> transitionType of its first committed load
+chrome.webNavigation.onCreatedNavigationTarget.addListener((d) => navTargets.add(d.tabId));
+
+async function waitFor(check, ms) {
+  for (const end = Date.now() + ms; Date.now() < end; await sleep(20)) if (check()) return true;
+  return check();
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function openKind(tab, url) {
+  if (tab.openerTabId == null) return "elsewhere";
+  if (await waitFor(() => navTargets.has(tab.id), 300)) return "page";
+  const opener = await chrome.tabs.get(tab.openerTabId).catch(() => null);
+  if (!opener || tabUrl(opener) !== url) return "elsewhere"; // a duplicate always starts on its opener's URL
+  await waitFor(() => firstCommit.has(tab.id), 2000);
+  return firstCommit.get(tab.id) === "reload" ? "duplicate" : "elsewhere";
+}
+
+// Last time each group was opened from elsewhere, for "links opened in quick succession stay separate".
+const recentOpens = {};
+
+/** Returns true if the tab was handled (switched/navigated and closed, or deliberately kept). */
+async function handleNewTab(tab, url, kind = "elsewhere") {
   await booted;
   if (Date.now() < restoringUntil || tab.discarded) {
     console.debug("tab-dedupe: skip (start-up restore)", tab.id);
@@ -40,8 +67,13 @@ async function handleNewTab(tab, url) {
   const rules = await getAllRules(settings);
   const tabs = await chrome.tabs.query({});
   const self = { ...(tabs.find((t) => t.id === tab.id) || {}), ...tab, url, pendingUrl: url };
-  const d = decideNewTab(self, tabs, rules, settings);
-  console.debug("tab-dedupe:", url, JSON.stringify(d));
+  const now = Date.now();
+  const d = decideNewTab(self, tabs, rules, settings, { kind, now, recent: recentOpens });
+  if (kind === "elsewhere") {
+    const k = keyFor(url, rules);
+    if (k) recentOpens[k.key] = now;
+  }
+  console.debug("tab-dedupe:", kind, url, JSON.stringify(d));
   if (d.action !== "switch" && d.action !== "navigate") return d.action === "keep";
   const target = tabs.find((t) => t.id === d.targetId);
   try {
@@ -54,20 +86,27 @@ async function handleNewTab(tab, url) {
   return true;
 }
 
+// Tabs being followed through redirects, in memory first so a fast redirect can never commit before following
+// starts; mirrored to session storage so a service-worker restart doesn't lose them.
+const following = new Map();
+const followLoaded = getWatch().then(({ follow }) => {
+  for (const [id, f] of Object.entries(follow)) if (!following.has(Number(id))) following.set(Number(id), f);
+});
+const saveFollowing = () => chrome.storage.session.set({ follow: Object.fromEntries(following) });
+function stopFollowing(tabId) {
+  if (following.delete(tabId)) saveFollowing();
+}
+
 /** First web URL of a new tab: decide, and if nothing matched keep following its redirects for a while. */
 async function firstUrl(tab, url) {
-  // Start following before deciding: a fast server redirect can commit while the decision is still running.
-  const follow = (await getSettings()).followRedirects !== false;
+  following.set(tab.id, { until: Date.now() + FOLLOW_MS, committed: false }); // synchronously, before any await
+  saveFollowing();
   const w = await getWatch();
-  delete w.fresh[tab.id];
-  if (follow) w.follow[tab.id] = { until: Date.now() + FOLLOW_MS, committed: false };
-  await setWatch(w);
-  if (!follow) return handleNewTab(tab, url);
-  if (await handleNewTab(tab, url)) {
-    const w2 = await getWatch();
-    delete w2.follow[tab.id];
-    await setWatch(w2);
+  if (w.fresh[tab.id]) {
+    delete w.fresh[tab.id];
+    await setWatch(w);
   }
+  if (await handleNewTab(tab, url, await openKind(tab, url))) stopFollowing(tab.id);
 }
 
 chrome.tabs.onCreated.addListener(async (tab) => {
@@ -91,35 +130,32 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.url || info.status || "pinned" in info || "groupId" in info) scheduleRefresh();
 });
 
-// Redirects of a tab we're following: server redirects, script redirects (e.g. Teams Safe Links pages) and the
-// automatic form posts of sign-in pages. Any other navigation means you're using the tab, so we stop.
+// Redirects of a tab we're following: server redirects, script redirects (e.g. link-scanner pages without a link
+// wrapper) and the automatic form posts of sign-in pages. Any other navigation means you're using the tab: stop.
 chrome.webNavigation.onCommitted.addListener(async (d) => {
   if (d.frameId !== 0) return;
-  const w = await getWatch();
-  const f = w.follow[d.tabId];
+  if (!firstCommit.has(d.tabId)) firstCommit.set(d.tabId, d.transitionType);
+  await followLoaded;
+  const f = following.get(d.tabId);
   if (!f) return;
   const redirect = d.transitionQualifiers.some((q) => q === "client_redirect" || q === "server_redirect");
-  if (Date.now() > f.until || (!redirect && f.committed && d.transitionType !== "form_submit")) {
-    delete w.follow[d.tabId];
-    return setWatch(w);
-  }
+  const auto = redirect || d.transitionType === "form_submit";
+  if (Date.now() > f.until || (!auto && f.committed)) return stopFollowing(d.tabId);
   f.committed = true;
-  await setWatch(w);
-  if (!redirect && d.transitionType !== "form_submit") return; // the tab's own first page load
+  if (!auto) return saveFollowing(); // the tab's own first page load
+  if ((await getSettings()).followRedirects === false) return stopFollowing(d.tabId);
   const tab = await chrome.tabs.get(d.tabId).catch(() => null);
-  if (tab && (await handleNewTab(tab, d.url))) {
-    const w2 = await getWatch();
-    delete w2.follow[d.tabId];
-    await setWatch(w2);
-  }
+  if (tab && (await handleNewTab(tab, d.url))) stopFollowing(d.tabId);
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   applied.delete(tabId);
+  navTargets.delete(tabId);
+  firstCommit.delete(tabId);
+  stopFollowing(tabId);
   const w = await getWatch();
-  if (w.fresh[tabId] || w.follow[tabId]) {
+  if (w.fresh[tabId]) {
     delete w.fresh[tabId];
-    delete w.follow[tabId];
     await setWatch(w);
   }
   scheduleRefresh();

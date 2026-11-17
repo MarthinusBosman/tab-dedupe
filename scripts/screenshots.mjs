@@ -74,10 +74,12 @@ await sleep(1500);
 const rulesUrl = `http://127.0.0.1:${PORT}/rules.json`;
 await evalIn(sw, `(async () => {
   const {settings} = await chrome.storage.sync.get("settings");
-  settings.rules = [settings.rules[0],
+  settings.rules = [{id: "s1", name: "Azure DevOps: one PR tab per project", onMatch: "navigate", enabled: true,
+      pattern: "dev.azure.com/{org}/{project}/_git/*/pullrequest/*\\n{org}.visualstudio.com/{project}/_git/*/pullrequest/*"},
     {id: "s2", name: "GitHub: one tab per repo's PRs", pattern: "github.com/{owner}/{repo}/pull/*", onMatch: "navigate", enabled: true},
     {id: "s3", name: "Databricks notebooks", pattern: "adb-*.azuredatabricks.net/editor/notebooks/*", onMatch: "switch", enabled: false}];
-  settings.rulesetUrls = [${JSON.stringify(rulesUrl)}];
+  settings.rulesetUrls = [...settings.rulesetUrls, ${JSON.stringify(rulesUrl)}];
+  settings.wrappers = [{kind: "unwrap", id: "w1", name: "Google search redirect", pattern: "www.google.com/url", param: "q", enabled: true}];
   settings.paused = true;
   await chrome.storage.sync.set({settings});
 })()`);

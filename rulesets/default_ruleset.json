@@ -1,5 +1,5 @@
 {
-  "name": "Azure DevOps",
+  "name": "Default rules",
   "rules": [
     {
       "id": "ado-pr",

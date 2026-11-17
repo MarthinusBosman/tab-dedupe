@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeUrl, compilePattern, keyFor, decideNewTab, planDuplicates, validateRuleset, unwrapUrl,
-  rulePatterns, patternWarning, aggressiveRule, importRules, exportRules,
+  rulePatterns, patternWarning, aggressiveRule, importRules, exportRules, tabUrl,
 } from "../lib/rules.js";
 import fs from "node:fs";
 
@@ -109,20 +109,49 @@ test("decideNewTab: opened from a matching tab (ctrl+click) keeps both, even whe
     { action: "navigate", targetId: 1, url: `${ADO}/x/pullrequest/2` });
 });
 
-test("decideNewTab: the same link opened three times in a row", () => {
-  // You're on an unrelated tab (9); a PR tab (1) is open in the background.
+// ---- how the tab was opened: "page" (ctrl+click on a page), "duplicate" (Duplicate tab), "elsewhere" (other apps,
+// typed URLs). Without a ctx, a tab with an opener counts as "page", otherwise "elsewhere".
+const NOW = 1_000_000;
+const burst = (key, ago) => ({ kind: "elsewhere", now: NOW, recent: { [key]: NOW - ago } });
+const PR_KEY = "rule:pr:"; // keyFor(any PR URL, [PR_ONE]).key
+
+test("elsewhere: a link from another app goes to the matching tab even if you're on it (no ctrl+click semantics)", () => {
+  const pr = tab(1, PR1, { lastAccessed: 99 }), n = tab(2, PR2, { openerTabId: 1 });
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], DEFAULTS, { kind: "elsewhere", now: NOW, recent: {} }), { action: "navigate", targetId: 1, url: PR2 });
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], DEFAULTS, { kind: "page" }), { action: "keep" });
+});
+
+test("elsewhere: links opened in a burst (same group within N seconds) open as separate tabs", () => {
+  const pr = tab(1, PR1), n = tab(2, PR2);
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], DEFAULTS, burst(PR_KEY, 3_000)), { action: "keep" });
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], DEFAULTS, burst(PR_KEY, 11_000)), { action: "navigate", targetId: 1, url: PR2 });
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], { ...DEFAULTS, burstSeconds: 30 }, burst(PR_KEY, 11_000)), { action: "keep" });
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], { ...DEFAULTS, burstSeconds: 0 }, burst(PR_KEY, 1)), { action: "navigate", targetId: 1, url: PR2 });
+  // a burst of a different group doesn't count
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], DEFAULTS, burst("url:other", 1)), { action: "navigate", targetId: 1, url: PR2 });
+});
+
+test("the same link opened three times in a row from another app", () => {
   const other = tab(9, "https://example.com/inbox", { lastAccessed: 100 });
   const pr = tab(1, PR1, { lastAccessed: 10 });
-  const first = tab(20, PR2, { openerTabId: 9 });
-  assert.deepEqual(decideNewTab(first, [other, pr, first], [PR_ONE], DEFAULTS), { action: "navigate", targetId: 1, url: PR2 });
-  // Tab 1 now shows PR2 and is the tab you're on; opening the link again comes "from" it: new tab.
+  const recent = {};
+  const open = (n, tabs, now) => {
+    const d = decideNewTab(n, tabs, [PR_ONE], DEFAULTS, { kind: "elsewhere", now, recent });
+    recent[keyFor(tabUrl(n), [PR_ONE]).key] = now; // what background.js records after each open
+    return d;
+  };
+  assert.deepEqual(open(tab(20, PR2, { openerTabId: 9 }), [other, pr], NOW), { action: "navigate", targetId: 1, url: PR2 });
   const pr1now = { ...pr, url: PR2, lastAccessed: 200 };
-  const second = tab(21, PR2, { openerTabId: 1 });
-  assert.deepEqual(decideNewTab(second, [other, pr1now, second], [PR_ONE], DEFAULTS), { action: "keep" });
-  // You're now on tab 21; the third time comes from it, so tab 1 is not overwritten either.
-  const t21 = { ...second, lastAccessed: 300 };
-  const third = tab(22, PR2, { openerTabId: 21 });
-  assert.deepEqual(decideNewTab(third, [other, pr1now, t21, third], [PR_ONE], DEFAULTS), { action: "keep" });
+  assert.deepEqual(open(tab(21, PR2, { openerTabId: 1 }), [other, pr1now], NOW + 2_000), { action: "keep" });
+  assert.deepEqual(open(tab(22, PR2, { openerTabId: 21 }), [other, pr1now, tab(21, PR2)], NOW + 4_000), { action: "keep" });
+  // much later, from the same tab you're still on: back to normal
+  assert.deepEqual(open(tab(23, PR1, { openerTabId: 21 }), [other, pr1now, tab(21, PR2, { lastAccessed: 300 })], NOW + 60_000),
+    { action: "navigate", targetId: 21, url: PR1 });
+});
+
+test("duplicate tab: always kept", () => {
+  const pr = tab(1, PR1), n = tab(2, PR1, { openerTabId: 1 });
+  assert.deepEqual(decideNewTab(n, [pr, n], [PR_ONE], { ...DEFAULTS, openerSelf: "applyRule" }, { kind: "duplicate" }), { action: "keep" });
 });
 
 test("decideNewTab: paused, pinned (ignore mode), incognito are ignored", () => {

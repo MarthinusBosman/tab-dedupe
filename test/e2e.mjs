@@ -146,8 +146,10 @@ try {
       wrappers: (rulesets?.[u]?.rules || []).filter((r) => r.kind === "unwrap").length })))`);
   check("default rulesets subscribed and available straight after install",
     defaults.length === 2 && defaults.every((d) => d.n > 0) && defaults.some((d) => d.wrappers === 2), JSON.stringify(defaults));
-  await setSettings({ rules: [PR, SW, REPO] });
+  // The harness opens tabs seconds apart; burst handling is tested on its own in 16c/16d.
+  await setSettings({ rules: [PR, SW, REPO], burstSeconds: 0 });
   // Right after install/reload there's no start-up guard: duplicates are caught immediately.
+  await setSettings({ burstSeconds: 0 });
   await open(`${BASE}/fresh`); await sleep(800);
   await open(`${BASE}/fresh`); await sleep(1200);
   check("straight after install: a duplicate is caught immediately", (await webTabs(`${BASE}/fresh`)).length === 1);
@@ -335,10 +337,27 @@ try {
   await open(`${BASE}/pr/1`); await sleep(1000);
   const inbox = (await send("Target.createTarget", { url: `${BASE}/inbox` })).targetId; await sleep(1200);
   await send("Target.activateTarget", { targetId: inbox }); await sleep(300);
-  for (let i = 0; i < 3; i++) { await send("Target.createTarget", { url: `${BASE}/pr/2` }); await sleep(1800); }
+  await setSettings({ burstSeconds: 4 });
+  await sleep(4500); // opening /pr/1 above started a burst window
+  for (let i = 0; i < 3; i++) { await send("Target.createTarget", { url: `${BASE}/pr/2` }); await sleep(1200); }
   t = await webTabs(`${BASE}/pr/`);
   check("same link 3x from another app: 1st replaces the PR tab, 2nd and 3rd open new tabs",
     t.length === 3 && t.every((x) => x.url.endsWith("/pr/2")), JSON.stringify(t));
+  await sleep(4500);
+  await send("Target.createTarget", { url: `${BASE}/pr/2` }); await sleep(1500);
+  check("after the burst window: back to switching to the open tab", (await webTabs(`${BASE}/pr/`)).length === 3);
+
+  // 16d. a link from another app while you're on the matching tab (opener set, no page click): goes to that tab
+  await closeAllWeb();
+  await open(`${BASE}/pr/1`); await sleep(4600);
+  const onPr = (await webTabs(`${BASE}/pr/`))[0].id;
+  await bg(`chrome.tabs.create({url: "${BASE}/pr/5", openerTabId: ${onPr}}).then(() => 0)`); await sleep(1800);
+  t = await webTabs(`${BASE}/pr/`);
+  check("link from another app while on the matching tab: replaces it, no duplicate", t.length === 1 && t[0].url.endsWith("/pr/5"), JSON.stringify(t));
+  await sleep(4500);
+  await bg(`chrome.tabs.duplicate(${onPr}).then(() => 0)`); await sleep(1800);
+  check("Duplicate tab is kept", (await webTabs(`${BASE}/pr/`)).length === 2);
+  await setSettings({ burstSeconds: 0 });
 
   // 17. one rule, two hosts, shared variable: 127.0.0.1 and localhost count as the same page
   await closeAllWeb();
