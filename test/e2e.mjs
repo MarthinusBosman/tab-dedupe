@@ -213,6 +213,26 @@ try {
   const os_ = await attachPage(opt);
   const optRows = await evalIn(os_, "document.querySelectorAll('#rules .rule').length");
   check("options page renders the rules", optRows === 3, String(optRows));
+  // Real key presses into the ruleset URL box (insertText would bypass keydown handlers)
+  await evalIn(os_, "document.getElementById('rsUrl').focus()");
+  for (const ch of "abc") {
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, text: ch, code: `Key${ch.toUpperCase()}` }, os_);
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: ch, code: `Key${ch.toUpperCase()}` }, os_);
+  }
+  const typed = await evalIn(os_, "document.getElementById('rsUrl').value");
+  check("can type into the online ruleset URL box", typed === "abc", JSON.stringify(typed));
+  await evalIn(os_, "document.getElementById('rsUrl').value = ''");
+  // A long pattern wraps instead of scrolling sideways (a scrollbar would cover the text)
+  const overflow = await evalIn(os_, `(() => {
+    const ta = document.querySelector('#rules .rule textarea.pattern');
+    ta.value = "https://adb-5207444812819379.19.azuredatabricks.net/editor/notebooks/{id}/some/very/long/path/segment/that/goes/on";
+    ta.dispatchEvent(new Event("input"));
+    return { scroll: ta.scrollWidth, client: ta.clientWidth, height: ta.clientHeight, needed: ta.scrollHeight };
+  })()`);
+  check("long pattern wraps: no sideways scrolling, nothing hidden", overflow.scroll <= overflow.client + 1 && overflow.needed <= overflow.height + 2, JSON.stringify(overflow));
+  await sleep(500);
+  await setSettings({ rules: [PR, SW, REPO] }); // the check above edited the first rule
+  await send("Page.reload", {}, os_); await sleep(1500);
   const count = await evalIn(os_, "chrome.runtime.sendMessage({type: 'count'})");
   check("count reports 1 duplicate", count.count === 1, JSON.stringify(count));
   const closed = await evalIn(os_, "chrome.runtime.sendMessage({type: 'closeDuplicates'})");

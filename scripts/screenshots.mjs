@@ -77,7 +77,7 @@ await evalIn(sw, `(async () => {
   settings.rules = [{id: "s1", name: "Azure DevOps: one PR tab per project", onMatch: "navigate", enabled: true,
       pattern: "dev.azure.com/{org}/{project}/_git/*/pullrequest/*\\n{org}.visualstudio.com/{project}/_git/*/pullrequest/*"},
     {id: "s2", name: "GitHub: one tab per repo's PRs", pattern: "github.com/{owner}/{repo}/pull/*", onMatch: "navigate", enabled: true},
-    {id: "s3", name: "Databricks notebooks", pattern: "adb-*.azuredatabricks.net/editor/notebooks/*", onMatch: "switch", enabled: false}];
+    {id: "s3", name: "Databricks notebooks", pattern: "https://adb-5207444812819379.19.azuredatabricks.net/editor/notebooks/{notebook}", onMatch: "switch", enabled: false}];
   settings.rulesetUrls = [...settings.rulesetUrls, ${JSON.stringify(rulesUrl)}];
   settings.wrappers = [{kind: "unwrap", id: "w1", name: "Google search redirect", pattern: "www.google.com/url", param: "q", enabled: true}];
   settings.paused = true;

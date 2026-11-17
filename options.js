@@ -43,7 +43,12 @@ const saveRulesSoon = () => {
   saveTimer = setTimeout(() => saveSettings({ rules: settings.rules }).then(updateCount).then(runTest), 300);
 };
 
+// Pattern boxes grow to fit their (wrapped) text; refit when the window width changes.
+const fitters = new Set();
+addEventListener("resize", () => fitters.forEach((f) => f()));
+
 function renderRules(focusIndex) {
+  fitters.clear();
   const box = $("rules");
   box.replaceChildren();
   if (!settings.rules.length) {
@@ -59,7 +64,7 @@ function renderRules(focusIndex) {
     const row = el("div", { className: `rule${r.enabled === false ? " off" : ""}` });
     const warn = el("div", { className: "warn", textContent: patternWarning(r) || "", hidden: !patternWarning(r) });
     const pattern = el("textarea", { className: "pattern", value: r.pattern, placeholder: "example.com/docs/*  (one pattern per line)",
-      ariaLabel: "URL patterns, one per line", spellcheck: false, rows: 1, wrap: "off" });
+      ariaLabel: "URL patterns, one per line", spellcheck: false, rows: 1 });
     const fit = () => { pattern.style.height = "auto"; pattern.style.height = `${pattern.scrollHeight + 2}px`; };
     pattern.oninput = () => {
       r.pattern = pattern.value.split("\n").map((l) => l.trim()).join("\n");
@@ -70,6 +75,7 @@ function renderRules(focusIndex) {
       saveRulesSoon();
     };
     requestAnimationFrame(fit);
+    fitters.add(fit);
     const nameInput = el("input", { type: "text", className: "name", value: r.name || "", placeholder: "Rule name", ariaLabel: "Rule name",
       oninput: (e) => { r.name = e.target.value; saveRulesSoon(); } });
     row.append(
@@ -294,7 +300,10 @@ $("addRs").onclick = async () => {
   $("rsUrl").value = "";
   await refreshNow();
 };
-$("rsUrl").onkeydown = (e) => e.key === "Enter" && $("addRs").click();
+// Block body on purpose: a handler property returning false cancels the keystroke.
+$("rsUrl").onkeydown = (e) => {
+  if (e.key === "Enter") $("addRs").click();
+};
 
 async function refreshNow() {
   const status = $("rsStatus");
