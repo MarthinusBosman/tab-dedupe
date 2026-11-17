@@ -1,9 +1,105 @@
-:root { color-scheme: light dark; --muted: #888; --err: #c0392b; --accent: #2563eb; }
-body { font: 13px/1.4 "Segoe UI", system-ui, sans-serif; margin: 0; }
-button { font: inherit; padding: 5px 10px; cursor: pointer; border-radius: 4px; border: 1px solid #8884; background: transparent; color: inherit; }
-button.primary { background: var(--accent); color: white; border-color: var(--accent); }
-button:disabled { opacity: .5; cursor: default; }
-input[type=text], input[type=url], input[type=number], select { font: inherit; padding: 4px 6px; border: 1px solid #8886; border-radius: 4px; background: transparent; color: inherit; }
-a { color: var(--accent); }
+/* Shared look for the popup and settings page. Modelled on Edge's own settings pages (Fluent). */
+:root {
+  color-scheme: light dark;
+  --bg: #f7f7f7;
+  --card: #ffffff;
+  --hover: #f5f5f5;
+  --border: #e5e5e5;
+  --divider: #ebebeb;
+  --ink: #1a1a1a;
+  --muted: #616161;
+  --faint: #8a8a8a;
+  --accent: #0f6cbd;
+  --accent-hover: #115ea3;
+  --accent-ink: #ffffff;
+  --accent-soft: #ebf3fc;
+  --danger: #c50f1f;
+  --field: #ffffff;
+  --field-border: #d1d1d1;
+  --switch-off: #757575;
+  --code-bg: #f0f0f0;
+  --radius: 8px;
+  --mono: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1f1f;
+    --card: #2b2b2b;
+    --hover: #333333;
+    --border: #3a3a3a;
+    --divider: #363636;
+    --ink: #f5f5f5;
+    --muted: #b8b8b8;
+    --faint: #8f8f8f;
+    --accent: #479ef5;
+    --accent-hover: #62abf5;
+    --accent-ink: #0a0a0a;
+    --accent-soft: #1d3349;
+    --danger: #ff8a8a;
+    --field: #232323;
+    --field-border: #4a4a4a;
+    --switch-off: #a8a8a8;
+    --code-bg: #383838;
+  }
+}
+
+* { box-sizing: border-box; }
+/* Set on body, not :root: Edge's built-in extension-page stylesheet sets body { font-size: 75% }. */
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+h1, h2, h3, p { margin: 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
 .muted { color: var(--muted); }
-.err { color: var(--err); }
+.faint { color: var(--faint); }
+.err { color: var(--danger); }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Buttons */
+button {
+  font: inherit; font-weight: 600; color: var(--ink); background: var(--card);
+  border: 1px solid var(--field-border); border-radius: 6px; padding: 4px 14px; min-height: 32px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+}
+button:hover:not(:disabled) { background: var(--hover); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+button.subtle { background: transparent; border-color: transparent; font-weight: 400; color: var(--accent); }
+button.subtle:hover:not(:disabled) { background: var(--hover); }
+button.icon { padding: 0; width: 30px; min-height: 30px; font-weight: 400; color: var(--muted); background: transparent; border-color: transparent; }
+button.icon:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+button.icon.danger:hover:not(:disabled) { color: var(--danger); }
+button:disabled { opacity: 0.4; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Fields */
+input[type=text], input[type=url], input[type=number], select {
+  font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--field-border);
+  border-radius: 6px; padding: 4px 10px; min-height: 32px; min-width: 0;
+}
+input::placeholder { color: var(--faint); }
+input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 -1px 0 var(--accent); }
+
+/* Switch: <input type=checkbox class=switch> */
+input.switch {
+  appearance: none; flex: none; width: 40px; height: 20px; margin: 0; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--switch-off); background: transparent; position: relative; transition: background .12s, border-color .12s;
+}
+input.switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--switch-off); transition: transform .12s, background .12s;
+}
+input.switch:checked { background: var(--accent); border-color: var(--accent); }
+input.switch:checked::after { transform: translateX(20px); background: var(--accent-ink); }
+input.switch:focus-visible { outline-offset: 2px; }
+input.switch.small { width: 32px; height: 16px; }
+input.switch.small::after { top: 2px; left: 2px; width: 10px; height: 10px; }
+input.switch.small:checked::after { transform: translateX(16px); }
+@media (prefers-reduced-motion: reduce) { input.switch, input.switch::after { transition: none; } }
+
+/* Cards made of rows: text on the left, control on the right */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 16px; padding: 12px 20px; min-height: 60px; }
+.card > * + *, #rules > * + *, #rulesets > * + *, .ruleset > * + * { border-top: 1px solid var(--divider); }
+.row .text { flex: 1; min-width: 0; }
+.desc { color: var(--muted); font-size: 12.5px; margin-top: 1px; }

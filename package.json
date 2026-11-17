@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test test/rules.test.js",
     "e2e": "node test/e2e.mjs",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "license": "MIT"
 }

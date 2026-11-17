@@ -1,85 +1,171 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Tab Dedupe settings</title>
+<link rel="icon" href="icons/icon32.png">
 <link rel="stylesheet" href="ui.css">
 <style>
-  body { max-width: 900px; margin: 24px auto; padding: 0 16px; }
-  h1 { font-size: 20px; } h2 { font-size: 15px; margin-top: 28px; }
-  table { width: 100%; border-collapse: collapse; }
-  td, th { padding: 4px; text-align: left; vertical-align: middle; }
-  th { font-weight: 600; border-bottom: 1px solid #8884; }
-  td input[type=text] { width: 100%; box-sizing: border-box; }
-  td.pattern { width: 50%; }
-  .ctl button { padding: 2px 7px; }
-  .setting { margin: 8px 0; }
-  code { background: #8882; padding: 1px 4px; border-radius: 3px; }
-  .ruleset { border: 1px solid #8884; border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
-  .ruleset header { display: flex; justify-content: space-between; gap: 8px; }
+  main { max-width: 880px; margin: 0 auto; padding: 32px 24px 48px; }
+  header.page { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+  header.page img { width: 40px; height: 40px; }
+  header.page h1 { font: 600 24px/1.2 "Segoe UI", system-ui, sans-serif; }
+  section { margin-top: 32px; }
+  section > h2 { font-size: 16px; font-weight: 600; }
+  section > .intro { color: var(--muted); margin: 4px 0 12px; max-width: 72ch; }
+
+  /* Rule rows */
+  .rule { display: grid; grid-template-columns: auto minmax(0, 1fr) 236px auto; gap: 16px; align-items: center; padding: 10px 12px 10px 20px; }
+  .rule .fields { display: grid; gap: 1px; }
+  .rule .fields input { border-color: transparent; background: transparent; min-height: 28px; padding: 2px 8px; margin-left: -9px; width: 100%; }
+  .rule .fields input:hover { border-color: var(--field-border); }
+  .rule .fields input:focus { border-color: var(--accent); background: var(--field); }
+  .rule .name { font-weight: 600; }
+  .rule .pattern { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .rule select { width: 100%; }
+  .rule .tools { display: flex; gap: 2px; }
+  .rule.off .fields, .rule.off select { opacity: .55; }
+  .empty { padding: 20px; color: var(--muted); }
+  .card-actions { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+
+  /* Pattern help */
+  details > summary { cursor: pointer; padding: 12px 20px; color: var(--accent); list-style: none; display: flex; align-items: center; gap: 8px; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary svg { transition: transform .12s; }
+  details[open] > summary svg { transform: rotate(90deg); }
+  .help { padding: 0 20px 16px 44px; color: var(--muted); display: grid; gap: 10px; }
+  .help dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  .help dd { margin: 0; }
+
+  /* URL tester */
+  .tester { display: grid; gap: 8px; padding: 14px 20px 16px; }
+  .tester input { width: 100%; font-family: var(--mono); font-size: 13px; }
+  .result { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; min-height: 22px; color: var(--muted); }
+  .result b { color: var(--ink); font-weight: 600; }
+  .pill { background: var(--accent-soft); color: var(--accent); border-radius: 10px; padding: 1px 9px; font-weight: 600; font-size: 12px; }
+
+  /* Rulesets */
+  .add { display: flex; gap: 8px; padding: 14px 20px; }
+  .add input { flex: 1; }
+  .rs-head { display: flex; gap: 16px; align-items: flex-start; padding: 14px 12px 14px 20px; }
+  .rs-head .text { flex: 1; min-width: 0; }
+  .rs-head .name { font-weight: 600; }
+  .rs-head .url { font-size: 12.5px; color: var(--faint); overflow-wrap: anywhere; }
+  .rs-rule { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 8px 20px 8px 20px; }
+  .rs-rule code { background: none; padding: 0; color: var(--muted); font-size: 12.5px; }
+  .rs-rule .act { font-size: 12.5px; color: var(--faint); }
+  .rs-rule.off > div { opacity: .55; }
+  .num { width: 64px; text-align: right; }
+  footer { margin-top: 40px; color: var(--faint); font-size: 12.5px; display: flex; gap: 16px; }
 </style>
 </head>
 <body>
-  <h1>Tab Dedupe</h1>
-  <p>
-    <button id="close" class="primary">Close duplicates now</button>
-    <span id="count" class="muted"></span>
-  </p>
+<main>
+  <header class="page">
+    <img src="icons/icon128.png" alt="">
+    <div>
+      <h1>Tab Dedupe</h1>
+      <p class="muted">Switches to the tab you already have open instead of opening a duplicate.</p>
+    </div>
+  </header>
 
-  <h2>Your rules</h2>
-  <p class="muted">
-    By default, pages are the same when the URL matches, ignoring <code>#fragment</code>, trailing slash and http/https.
-    Rules group more pages together. They are tried top to bottom, before online rules.<br>
-    In a pattern, <code>*</code> means ignore this part, <code>**</code> means ignore anything (including slashes),
-    <code>{name}</code> means one tab per value of this part. Anything after the pattern is ignored
-    (unless the pattern contains <code>?</code>, then the query is matched too).<br>
-    Examples: <code>dev.azure.com/*/*/_git/*/pullrequest/*</code> gives one PR tab;
-    <code>dev.azure.com/*/*/_git/{repo}/pullrequest/*</code> gives one PR tab per repo.
-  </p>
-  <table>
-    <thead><tr><th>On</th><th>Name</th><th>Pattern</th><th>When a match is open</th><th></th></tr></thead>
-    <tbody id="rules"></tbody>
-  </table>
-  <p><button id="addRule">Add rule</button></p>
-
-  <p>
-    Test a URL: <input type="url" id="testUrl" size="60" placeholder="https://dev.azure.com/...">
-    <span id="testOut" class="muted"></span>
-  </p>
-
-  <h2>Behaviour</h2>
-  <div class="setting">
-    <label>Ctrl+click (or "Duplicate tab") when the only matching tab is the one you're in:
-      <select id="openerSelf">
-        <option value="keepBoth">Open the new tab anyway</option>
-        <option value="applyRule">Apply the rule as normal</option>
-      </select>
-    </label>
-  </div>
-  <div class="setting">
-    <label><input type="checkbox" id="markers"> Mark duplicate tabs with 🔁 in the tab title</label>
-    <div class="muted">Needs permission to change pages on all sites; Edge asks when you switch this on.</div>
-  </div>
-  <div class="setting">
-    <label><input type="checkbox" id="paused"> Pause (don't switch tabs)</label>
+  <div class="card">
+    <div class="row">
+      <div class="text">
+        <label for="enabled">Switch to existing tabs</label>
+        <div class="desc">When off, duplicate tabs open normally.</div>
+      </div>
+      <input type="checkbox" class="switch" id="enabled">
+    </div>
+    <div class="row">
+      <div class="text">
+        <div id="count">Counting duplicates…</div>
+        <div class="desc">Keeps the most recently used tab in each group and closes the rest.</div>
+      </div>
+      <button id="close" class="primary">Close duplicates now</button>
+    </div>
   </div>
 
-  <h2>Online rulesets</h2>
-  <p class="muted">
-    A JSON file like <code>{"name": "ADO", "rules": [{"name": "One PR tab", "pattern": "dev.azure.com/*/*/_git/*/pullrequest/*", "onMatch": "navigate"}]}</code>.
-    <code>onMatch</code> is <code>navigate</code> (show the new URL in the existing tab, default) or <code>switch</code>.
-  </p>
-  <p>
-    <input type="url" id="rsUrl" size="60" placeholder="https://raw.githubusercontent.com/.../rules.json">
-    <button id="addRs">Add</button>
-  </p>
-  <p>
-    Refresh every <input type="number" id="refreshHours" min="1" style="width:60px"> hours
-    <button id="refreshNow">Refresh now</button>
-    <span id="rsStatus" class="muted"></span>
-  </p>
-  <div id="rulesets"></div>
+  <section>
+    <h2>Rules</h2>
+    <p class="intro">By default, two tabs are the same page when their URLs match, ignoring the #fragment, a trailing
+      slash and http/https. Rules group more pages together. They're tried top to bottom, before online rules.</p>
+    <div class="card">
+      <div id="rules"></div>
+      <div class="card-actions"><button id="addRule" class="subtle"><svg class="i" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add rule</button></div>
+      <details>
+        <summary><svg class="i" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg>How patterns work</summary>
+        <div class="help">
+          <dl>
+            <dt><code>*</code></dt><dd>ignore this part of the URL (one path segment)</dd>
+            <dt><code>**</code></dt><dd>ignore anything, including slashes</dd>
+            <dt><code>{name}</code></dt><dd>one tab per value of this part</dd>
+          </dl>
+          <p>Anything after the pattern (more path, the query string, #fragment) is ignored, unless the pattern contains
+            <code>?</code>; then the query is matched too.</p>
+          <p><code>dev.azure.com/*/*/_git/*/pullrequest/*</code> keeps one pull-request tab.<br>
+            <code>dev.azure.com/*/*/_git/{repo}/pullrequest/*</code> keeps one per repository.</p>
+        </div>
+      </details>
+      <div class="tester">
+        <label for="testUrl">Test a URL</label>
+        <input type="url" id="testUrl" placeholder="Paste a URL to see which rule matches it">
+        <div class="result" id="testOut"></div>
+      </div>
+    </div>
+  </section>
 
-  <script type="module" src="options.js"></script>
+  <section>
+    <h2>Behaviour</h2>
+    <div class="card">
+      <div class="row">
+        <div class="text">
+          <label for="openerSelf">Ctrl+click from the matching tab</label>
+          <div class="desc">When you Ctrl+click a link (or duplicate a tab) and the only match is the tab you're in.</div>
+        </div>
+        <select id="openerSelf">
+          <option value="keepBoth">Open the new tab anyway</option>
+          <option value="applyRule">Apply the rule as normal</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="text">
+          <label for="markers">Mark duplicate tabs with 🔁</label>
+          <div class="desc">Adds 🔁 to the title of duplicate tabs. Edge asks for permission to change pages on all sites when you turn this on.</div>
+        </div>
+        <input type="checkbox" class="switch" id="markers">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Online rulesets</h2>
+    <p class="intro">Subscribe to shared rules in a JSON file, like the
+      <a href="https://github.com/MarthinusBosman/tab-dedupe/tree/main/rulesets" target="_blank">rulesets on GitHub</a>.
+      Your own rules take priority.</p>
+    <div class="card">
+      <div class="add">
+        <input type="url" id="rsUrl" placeholder="https://raw.githubusercontent.com/…/rules.json">
+        <button id="addRs">Add</button>
+      </div>
+      <div class="row">
+        <div class="text">
+          <label for="refreshHours">Refresh every</label>
+          <div class="desc" id="rsStatus">If a download fails, the last good copy is kept.</div>
+        </div>
+        <span><input type="number" class="num" id="refreshHours" min="1"> hours</span>
+        <button id="refreshNow">Refresh now</button>
+      </div>
+      <div id="rulesets"></div>
+    </div>
+  </section>
+
+  <footer>
+    <span id="version"></span>
+    <a href="https://github.com/MarthinusBosman/tab-dedupe" target="_blank">GitHub</a>
+    <a href="https://github.com/MarthinusBosman/tab-dedupe/issues" target="_blank">Report an issue</a>
+  </footer>
+</main>
+<script type="module" src="options.js"></script>
 </body>
 </html>

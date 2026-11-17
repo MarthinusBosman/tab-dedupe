@@ -193,7 +193,7 @@ try {
   const opt = (await send("Target.createTarget", { url: `chrome-extension://${extId}/options.html` })).targetId;
   await sleep(1500);
   const os_ = await attachPage(opt);
-  const optRows = await evalIn(os_, "document.querySelectorAll('#rules tr').length");
+  const optRows = await evalIn(os_, "document.querySelectorAll('#rules .rule').length");
   check("options page renders the rules", optRows === 3, String(optRows));
   const count = await evalIn(os_, "chrome.runtime.sendMessage({type: 'count'})");
   check("count reports 1 duplicate", count.count === 1, JSON.stringify(count));
