@@ -10,7 +10,7 @@ const PR_SWITCH = { ...PR_ONE, id: "prs", onMatch: "switch" };
 const DEFAULTS = { paused: false, openerSelf: "keepBoth" };
 const ADO = "https://dev.azure.com/m-kopa/Data%20Services/_git";
 
-const tab = (id, url, extra = {}) => ({ id, url, windowId: 1, pinned: false, incognito: false, lastAccessed: id, ...extra });
+const tab = (id, url, extra = {}) => ({ id, url, windowId: 1, pinned: false, incognito: false, groupId: -1, lastAccessed: id, ...extra });
 
 test("normalizeUrl ignores fragment, trailing slash, scheme; keeps query", () => {
   assert.equal(normalizeUrl("https://Example.com/a/b/#x"), "example.com/a/b");
@@ -102,24 +102,95 @@ test("decideNewTab: ctrl+click from opener but another matching tab exists -> us
     { action: "navigate", targetId: 5, url: `${ADO}/x/pullrequest/2` });
 });
 
-test("decideNewTab: paused, pinned, incognito are ignored", () => {
+test("decideNewTab: paused, pinned (ignore mode), incognito are ignored", () => {
   const a = tab(1, "https://e.com/a"), b = tab(2, "https://e.com/a");
   assert.equal(decideNewTab(b, [a, b], [], { ...DEFAULTS, paused: true }).action, "none");
-  assert.equal(decideNewTab(b, [{ ...a, pinned: true }, b], [], DEFAULTS).action, "none");
+  assert.equal(decideNewTab(b, [{ ...a, pinned: true }, b], [], { ...DEFAULTS, pinned: "ignore" }).action, "none");
+  assert.equal(decideNewTab({ ...b, pinned: true }, [a, b], [], DEFAULTS).action, "none");
   assert.equal(decideNewTab({ ...b, incognito: true }, [a, b], [], DEFAULTS).action, "none");
   assert.equal(decideNewTab(b, [{ ...a, incognito: true }, b], [], DEFAULTS).action, "none");
 });
 
-test("planDuplicates: keeps the most recently used tab per group", () => {
+test("planDuplicates: keeps the most recently used tab per page", () => {
   const tabs = [
     tab(1, "https://e.com/a", { lastAccessed: 10 }), tab(2, "https://e.com/a/", { lastAccessed: 30 }),
     tab(3, "https://e.com/a#z", { lastAccessed: 20 }), tab(4, "https://e.com/b"),
     tab(5, `${ADO}/dbt/pullrequest/1`, { lastAccessed: 5 }), tab(6, `${ADO}/x/pullrequest/2`, { lastAccessed: 6 }),
     tab(7, "https://e.com/a", { pinned: true }), tab(8, "edge://settings"),
   ];
-  const p = planDuplicates(tabs, [PR_ONE]);
+  const p = planDuplicates(tabs, [PR_ONE], { pinned: "ignore" });
   assert.deepEqual(p.closeIds.sort(), [1, 3, 5]);
   assert.deepEqual([...p.duplicateIds].sort(), [1, 2, 3, 5, 6]);
+});
+
+// ---- pinned tabs ----
+const PR1 = `${ADO}/dbt/pullrequest/1`, PR2 = `${ADO}/x/pullrequest/2`;
+
+test("pinned 'switch' (default): switches to a pinned match but never changes its URL", () => {
+  const pinned = tab(1, PR1, { pinned: true }), n = tab(2, PR2);
+  assert.deepEqual(decideNewTab(n, [pinned, n], [PR_ONE], DEFAULTS), { action: "switch", targetId: 1 });
+  const exact = tab(3, "https://e.com/a", { pinned: true }), n2 = tab(4, "https://e.com/a");
+  assert.deepEqual(decideNewTab(n2, [exact, n2], [], DEFAULTS), { action: "switch", targetId: 3 });
+});
+
+test("pinned 'switch': an unpinned match is preferred over a pinned one", () => {
+  const pinned = tab(1, PR1, { pinned: true, lastAccessed: 99 }), plain = tab(5, PR1, { lastAccessed: 1 }), n = tab(2, PR2);
+  assert.deepEqual(decideNewTab(n, [pinned, plain, n], [PR_ONE], DEFAULTS), { action: "navigate", targetId: 5, url: PR2 });
+});
+
+test("pinned 'redirect': a pinned tab is treated like any other tab", () => {
+  const pinned = tab(1, PR1, { pinned: true }), n = tab(2, PR2);
+  assert.deepEqual(decideNewTab(n, [pinned, n], [PR_ONE], { ...DEFAULTS, pinned: "redirect" }), { action: "navigate", targetId: 1, url: PR2 });
+});
+
+test("planDuplicates: pinned tabs are never closed and win over unpinned duplicates", () => {
+  const tabs = [tab(1, "https://e.com/a", { pinned: true, lastAccessed: 1 }), tab(2, "https://e.com/a", { lastAccessed: 50 }),
+    tab(3, "https://e.com/a", { pinned: true, lastAccessed: 2 })];
+  for (const pinned of ["switch", "redirect"]) {
+    assert.deepEqual(planDuplicates(tabs, [], { pinned }).closeIds, [2], pinned);
+  }
+  assert.deepEqual(planDuplicates(tabs, [], { pinned: "ignore" }).closeIds, []);
+});
+
+// ---- tab groups ----
+const G = (id, url, groupId, extra = {}) => tab(id, url, { groupId, ...extra });
+
+test("groups 'preferSame' (default): a match in the new tab's own group wins", () => {
+  const other = G(1, PR1, 7, { lastAccessed: 99 }), same = G(3, PR1, 8, { lastAccessed: 1 }), n = G(2, PR2, 8);
+  assert.deepEqual(decideNewTab(n, [other, same, n], [PR_ONE], DEFAULTS), { action: "navigate", targetId: 3, url: PR2 });
+});
+
+test("groups 'preferSame': a match in another group is only switched to, never changed", () => {
+  const other = G(1, PR1, 7), n = G(2, PR2, -1);
+  assert.deepEqual(decideNewTab(n, [other, n], [PR_ONE], DEFAULTS), { action: "switch", targetId: 1 });
+});
+
+test("groups 'separate': only tabs in the same group count", () => {
+  const s = { ...DEFAULTS, groups: "separate" };
+  const other = G(1, PR1, 7), n = G(2, PR2, -1);
+  assert.equal(decideNewTab(n, [other, n], [PR_ONE], s).action, "none");
+  const same = G(3, PR1, -1);
+  assert.deepEqual(decideNewTab(n, [other, same, n], [PR_ONE], s), { action: "navigate", targetId: 3, url: PR2 });
+});
+
+test("groups 'ignore': groups make no difference", () => {
+  const other = G(1, PR1, 7), n = G(2, PR2, -1);
+  assert.deepEqual(decideNewTab(n, [other, n], [PR_ONE], { ...DEFAULTS, groups: "ignore" }), { action: "navigate", targetId: 1, url: PR2 });
+});
+
+test("planDuplicates per group mode", () => {
+  const tabs = [G(1, "https://e.com/a", 7, { lastAccessed: 1 }), G(2, "https://e.com/a", 7, { lastAccessed: 2 }),
+    G(3, "https://e.com/a", 8, { lastAccessed: 3 }), G(4, "https://e.com/a", -1, { lastAccessed: 99 }),
+    G(5, "https://e.com/b", -1, { lastAccessed: 1 }), G(6, "https://e.com/b", -1, { lastAccessed: 2 })];
+  const close = (groups) => planDuplicates(tabs, [], { groups }).closeIds.sort();
+  // preferSame: one per group survives, ungrouped copies of a grouped page close
+  assert.deepEqual(close("preferSame"), [1, 4, 5]);
+  // separate: each group (and "no group") is its own world
+  assert.deepEqual(close("separate"), [1, 5]);
+  // ignore: most recently used wins, wherever it is
+  assert.deepEqual(close("ignore"), [1, 2, 3, 5]);
+  const d = planDuplicates(tabs, [], { groups: "separate" }).duplicateIds;
+  assert.deepEqual([...d].sort(), [1, 2, 5, 6]);
 });
 
 test("shipped rulesets/azure-devops.json is valid and matches real ADO URLs", async () => {

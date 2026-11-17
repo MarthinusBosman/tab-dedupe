@@ -150,6 +150,28 @@ $("close").onclick = async () => {
   $("close").disabled = true;
 };
 $("openerSelf").onchange = (e) => saveSettings({ openerSelf: e.target.value });
+
+const PINNED_DESC = {
+  switch: "Opening a page that's pinned takes you to the pinned tab, without changing its page. Pinned tabs are never closed.",
+  redirect: "Pinned tabs follow your rules like any other tab, so they can be switched to a newly opened URL. They're never closed.",
+  ignore: "Pinned tabs don't count: the same page can open next to them, and they're never switched to or closed.",
+};
+const GROUPS_DESC = {
+  preferSame: "A match in the same group is used first. A match in another group is only switched to, never changed, and Close duplicates keeps one tab per group.",
+  separate: "Each group, and tabs outside any group, is deduplicated on its own. The same page can be open once per group.",
+  ignore: "Groups make no difference: the most recently used match is used, wherever it is.",
+};
+function showModes() {
+  $("pinnedDesc").textContent = PINNED_DESC[$("pinned").value];
+  $("groupsDesc").textContent = GROUPS_DESC[$("groups").value];
+}
+for (const id of ["pinned", "groups"]) {
+  $(id).onchange = async (e) => {
+    showModes();
+    settings = await saveSettings({ [id]: e.target.value });
+    updateCount();
+  };
+}
 $("enabled").onchange = (e) => saveSettings({ paused: !e.target.checked });
 $("markers").onchange = async (e) => {
   if (e.target.checked && !(await chrome.permissions.request(ALL_SITES))) {
@@ -192,6 +214,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   settings = await getSettings();
   $("version").textContent = `Version ${chrome.runtime.getManifest().version}`;
   $("openerSelf").value = settings.openerSelf;
+  $("pinned").value = settings.pinned;
+  $("groups").value = settings.groups;
+  showModes();
   $("enabled").checked = !settings.paused;
   $("markers").checked = settings.markers && (await chrome.permissions.contains(ALL_SITES));
   $("refreshHours").value = settings.refreshHours;

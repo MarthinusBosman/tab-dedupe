@@ -71,8 +71,9 @@ Also included:
 - An optional 🔁 marker in the title of duplicate tabs.
 - Ctrl+click from a matching tab still opens a new tab (configurable).
 - A pause switch, and a toolbar badge showing how many duplicates are open.
+- Choose how pinned tabs and tab groups are handled, e.g. keep duplicates separate per tab group.
 
-Pinned and InPrivate tabs are never touched. No tracking, no data collection; open source under the MIT licence.
+Pinned tabs are never closed and InPrivate tabs are never touched. No tracking, no data collection; open source under the MIT licence.
 
 **Search terms**: duplicate tabs, tab manager, dedupe, close duplicate tabs, Azure DevOps, productivity
 

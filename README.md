@@ -24,7 +24,12 @@ it. The store version doesn't get this prompt.
   anyway, so your current tab is never replaced. Configurable.
 - **Close duplicates now** (popup and settings) closes all but the most recently used tab in each group.
 - Optional 🔁 prefix on duplicate tab titles (asks for the all-sites permission when switched on).
-- Pinned and InPrivate tabs are ignored. Tabs restored when Edge starts are not deduplicated.
+- Pinned tabs (configurable): by default, opening a pinned page switches to the pinned tab without changing it.
+  "Treat like any other tab" lets rules redirect pinned tabs; "Ignore" leaves them out. Pinned tabs are never closed.
+- Tab groups (configurable): by default a match in the same group is preferred, and one in another group is only
+  switched to, never changed; "Close duplicates now" keeps one tab per group. "Separate duplicates by group"
+  deduplicates each group on its own; "Ignore groups" disregards them.
+- InPrivate tabs are ignored. Tabs restored when Edge starts are not deduplicated.
 
 ## Rule patterns
 

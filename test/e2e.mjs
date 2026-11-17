@@ -233,7 +233,45 @@ try {
   t = await webTabs(`${BASE}/rs/`);
   check("disabled online rule no longer applies", t.length === 2, JSON.stringify(t));
 
-  // 13. popup renders
+  // 13. pinned tabs: default switches without changing; "redirect" lets the rule change it
+  await setSettings({ disabledRemote: [], rulesetUrls: [], openerSelf: "applyRule" });
+  await closeAllWeb();
+  await open(`${BASE}/pr/1`); await sleep(1200);
+  let pinId = (await webTabs(`${BASE}/pr/`))[0].id;
+  await bg(`chrome.tabs.update(${pinId}, {pinned: true})`); await sleep(500);
+  await open(`${BASE}/pr/2`); await sleep(1800);
+  t = await webTabs(`${BASE}/pr/`);
+  check("pinned (default): switches to the pinned tab, URL unchanged", t.length === 1 && t[0].id === pinId && t[0].url.endsWith("/pr/1") && t[0].active, JSON.stringify(t));
+  await setSettings({ pinned: "redirect" });
+  await open(`${BASE}/pr/2`); await sleep(1800);
+  t = await webTabs(`${BASE}/pr/`);
+  check("pinned redirect: pinned tab now shows /pr/2", t.length === 1 && t[0].id === pinId && t[0].url.endsWith("/pr/2"), JSON.stringify(t));
+  await setSettings({ pinned: "switch" });
+  await closeAllWeb();
+
+  // 14. groups (default preferSame): a grouped match is only switched to
+  await open(`${BASE}/pr/1`); await sleep(1200);
+  const grouped = (await webTabs(`${BASE}/pr/`))[0].id;
+  await bg(`chrome.tabs.group({tabIds: [${grouped}]}).then(() => 0)`); await sleep(500);
+  await open(`${BASE}/pr/2`); await sleep(1800);
+  t = await webTabs(`${BASE}/pr/`);
+  check("groups preferSame: ungrouped open switches to the grouped tab without changing it", t.length === 1 && t[0].url.endsWith("/pr/1") && t[0].active, JSON.stringify(t));
+
+  // 15. groups separate: ungrouped copy allowed; ctrl+click inside the group stays inside the group
+  await setSettings({ groups: "separate" });
+  await open(`${BASE}/pr/2`); await sleep(1800);
+  t = await webTabs(`${BASE}/pr/`);
+  check("groups separate: same page outside the group opens", t.length === 2, JSON.stringify(t));
+  await ctrlClick(await targetFor(`${BASE}/pr/1`)); await sleep(1500);
+  const info = await bg(`chrome.tabs.query({}).then(ts => ts.filter(x => x.url.includes("/pr/")).map(x => ({id: x.id, url: x.url, groupId: x.groupId})))`);
+  const inGroup = info.filter((x) => x.groupId !== -1), outside = info.filter((x) => x.groupId === -1);
+  check("groups separate: ctrl+click in the group navigates the grouped tab, not the ungrouped one",
+    info.length === 2 && inGroup.length === 1 && inGroup[0].url.endsWith("/pr/3") && outside[0]?.url.endsWith("/pr/2"), JSON.stringify(info));
+  const cnt = await evalIn(os_, "chrome.runtime.sendMessage({type: 'count'})");
+  check("groups separate: no duplicates counted across groups", cnt.count === 0, JSON.stringify(cnt));
+  await setSettings({ groups: "preferSame" });
+
+  // 16. popup renders
   const pop = (await send("Target.createTarget", { url: `chrome-extension://${extId}/popup.html` })).targetId;
   await sleep(1200);
   const ps = await attachPage(pop);

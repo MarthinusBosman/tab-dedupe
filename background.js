@@ -64,7 +64,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     }
   }
   if (info.status === "loading") applied.delete(tabId); // page reload drops the injected marker
-  if (info.url || info.status || "pinned" in info) scheduleRefresh();
+  if (info.url || info.status || "pinned" in info || "groupId" in info) scheduleRefresh();
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -118,7 +118,7 @@ function scheduleRefresh() {
 async function refresh() {
   const settings = await getSettings();
   const tabs = await chrome.tabs.query({});
-  const plan = planDuplicates(tabs, await getAllRules(settings));
+  const plan = planDuplicates(tabs, await getAllRules(settings), settings);
   const n = plan.closeIds.length;
   await chrome.action.setBadgeText({ text: settings.paused ? "off" : n ? String(n) : "" });
   await chrome.action.setBadgeBackgroundColor({ color: settings.paused ? "#888" : "#c2410c" });
@@ -134,8 +134,9 @@ async function refresh() {
 }
 
 async function closeDuplicates() {
+  const settings = await getSettings();
   const tabs = await chrome.tabs.query({});
-  const { closeIds } = planDuplicates(tabs, await getAllRules());
+  const { closeIds } = planDuplicates(tabs, await getAllRules(settings), settings);
   if (closeIds.length) await chrome.tabs.remove(closeIds);
   return closeIds.length;
 }
@@ -185,8 +186,9 @@ chrome.permissions.onAdded.addListener(scheduleRefresh);
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   (async () => {
     if (msg.type === "count") {
+      const settings = await getSettings();
       const tabs = await chrome.tabs.query({});
-      return { count: planDuplicates(tabs, await getAllRules()).closeIds.length };
+      return { count: planDuplicates(tabs, await getAllRules(settings), settings).closeIds.length };
     }
     if (msg.type === "closeDuplicates") {
       const closed = await closeDuplicates();

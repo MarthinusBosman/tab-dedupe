@@ -56,6 +56,7 @@
   .rs-rule .act { font-size: 12.5px; color: var(--faint); }
   .rs-rule.off > div { opacity: .55; }
   .num { width: 64px; text-align: right; }
+  .row select { width: 268px; flex: none; }
   footer { margin-top: 40px; color: var(--faint); font-size: 12.5px; display: flex; gap: 16px; }
 </style>
 </head>
@@ -126,6 +127,28 @@
         <select id="openerSelf">
           <option value="keepBoth">Open the new tab anyway</option>
           <option value="applyRule">Apply the rule as normal</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="text">
+          <label for="pinned">Pinned tabs</label>
+          <div class="desc" id="pinnedDesc"></div>
+        </div>
+        <select id="pinned">
+          <option value="switch">Switch to them, never change them</option>
+          <option value="redirect">Treat like any other tab</option>
+          <option value="ignore">Ignore pinned tabs</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="text">
+          <label for="groups">Tab groups</label>
+          <div class="desc" id="groupsDesc"></div>
+        </div>
+        <select id="groups">
+          <option value="preferSame">Prefer the same group</option>
+          <option value="separate">Separate duplicates by group</option>
+          <option value="ignore">Ignore groups</option>
         </select>
       </div>
       <div class="row">
