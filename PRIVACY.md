@@ -9,6 +9,8 @@ What it accesses, and why:
 
 - **Tab URLs and titles** (`tabs` permission): to tell whether a page you open is already open in another tab.
   This happens entirely inside your browser; URLs are never sent anywhere.
+- **Navigation events** (`webNavigation`): to follow a newly opened tab through redirects, such as Safe Links pages,
+  and recognise the page it lands on. Processed locally, never stored or sent anywhere.
 - **Settings** (`storage`): your rules and options are saved in your browser. If you use Edge sync, Edge syncs them
   across your own devices, as it does for any extension.
 - **Page titles** (optional, all-sites permission): only if you switch on the 🔁 duplicate marker, the extension

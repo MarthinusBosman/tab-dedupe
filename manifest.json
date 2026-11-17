@@ -14,7 +14,8 @@
     "tabs",
     "storage",
     "alarms",
-    "scripting"
+    "scripting",
+    "webNavigation"
   ],
   "optional_host_permissions": [
     "<all_urls>"

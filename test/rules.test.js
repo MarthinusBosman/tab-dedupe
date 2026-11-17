@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  normalizeUrl, compilePattern, keyFor, decideNewTab, planDuplicates, validateRuleset,
+  normalizeUrl, compilePattern, keyFor, decideNewTab, planDuplicates, validateRuleset, unwrapUrl,
 } from "../lib/rules.js";
 
 const PR_ONE = { id: "pr", pattern: "dev.azure.com/*/*/_git/*/pullrequest/*", onMatch: "navigate", enabled: true };
@@ -191,6 +191,36 @@ test("planDuplicates per group mode", () => {
   assert.deepEqual(close("ignore"), [1, 2, 3, 5]);
   const d = planDuplicates(tabs, [], { groups: "separate" }).duplicateIds;
   assert.deepEqual([...d].sort(), [1, 2, 5, 6]);
+});
+
+// ---- Safe Links (Teams / Outlook wrap links in a redirect page) ----
+const TEAMS_SAFE = (u) => `https://teams.public.onecdn.static.microsoft/evergreen-assets/safelinks/2/atp-safelinks.html?url=${encodeURIComponent(u)}&locale=en-gb&dest=https%3A%2F%2Fteams.microsoft.com`;
+const OUTLOOK_SAFE = (u) => `https://eur02.safelinks.protection.outlook.com/?url=${encodeURIComponent(u)}&data=05%7C02%7Cx&reserved=0`;
+
+test("unwrapUrl: Teams and Outlook Safe Links, everything else unchanged", () => {
+  assert.equal(unwrapUrl(TEAMS_SAFE(PR1)), PR1);
+  assert.equal(unwrapUrl(TEAMS_SAFE(PR1).replace("teams.public.onecdn.static.microsoft", "statics.teams.cdn.office.net")), PR1);
+  assert.equal(unwrapUrl(OUTLOOK_SAFE(PR1)), PR1);
+  assert.equal(unwrapUrl(PR1), PR1);
+  assert.equal(unwrapUrl("https://eur02.safelinks.protection.outlook.com/?url=javascript%3Aalert(1)"), "https://eur02.safelinks.protection.outlook.com/?url=javascript%3Aalert(1)");
+  assert.equal(unwrapUrl("https://example.com/atp-safelinks.html"), "https://example.com/atp-safelinks.html");
+});
+
+test("decideNewTab: a Safe Links tab is matched by its real URL", () => {
+  const open = tab(1, PR1), n = tab(2, TEAMS_SAFE(PR1));
+  assert.deepEqual(decideNewTab(n, [open, n], [PR_ONE], DEFAULTS), { action: "switch", targetId: 1 });
+  const n2 = tab(3, OUTLOOK_SAFE(PR1 + "#discussion"));
+  assert.deepEqual(decideNewTab(n2, [open, n2], [], DEFAULTS), { action: "switch", targetId: 1 });
+});
+
+test("decideNewTab: navigating through Safe Links loads the wrapped URL so the scan still runs", () => {
+  const open = tab(1, PR1), n = tab(2, TEAMS_SAFE(PR2));
+  assert.deepEqual(decideNewTab(n, [open, n], [PR_ONE], DEFAULTS), { action: "navigate", targetId: 1, url: TEAMS_SAFE(PR2) });
+});
+
+test("planDuplicates: a tab still on the Safe Links page counts as its real page", () => {
+  const p = planDuplicates([tab(1, PR1, { lastAccessed: 5 }), tab(2, TEAMS_SAFE(PR1), { lastAccessed: 1 })], [], {});
+  assert.deepEqual(p.closeIds, [2]);
 });
 
 test("shipped rulesets/azure-devops.json is valid and matches real ADO URLs", async () => {

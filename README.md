@@ -17,6 +17,8 @@ it. The store version doesn't get this prompt.
 
 - A new tab whose page is already open (a link opened in a new tab, a URL typed into a new tab, a link from Teams or
   Outlook) is closed, and the existing tab is focused. Navigating inside a tab is never touched.
+- Links wrapped by Microsoft Safe Links (Teams, Outlook) are matched by their real URL, and a new tab is followed
+  through redirects for a few seconds, so links that arrive via a redirect are caught too.
 - Default "same page": same URL ignoring `#fragment`, trailing slash and http/https. The query string still counts.
 - Rules (settings page) group more pages together, e.g. one Azure DevOps PR tab regardless of PR number.
   Per rule, when a match is open: **switch to it and open the new URL there** (default) or **just switch to it**.

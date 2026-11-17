@@ -31,6 +31,13 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ name: "E2E online", rules: [{ name: "one rs tab", pattern: `127.0.0.1:${PORT}/rs/*`, onMatch: "navigate" }] }));
   }
+  const u = new URL(req.url, BASE);
+  if (u.pathname === "/redir") { res.writeHead(302, { location: u.searchParams.get("to") }); return res.end(); }
+  if (u.pathname.endsWith("/atp-safelinks.html") || u.pathname === "/jsredir") {
+    const to = u.searchParams.get("url") || u.searchParams.get("to");
+    res.writeHead(200, { "content-type": "text/html" });
+    return res.end(`<title>redirecting</title><script>setTimeout(() => location.replace(${JSON.stringify(to)}), 600)</script>`);
+  }
   res.writeHead(200, { "content-type": "text/html" });
   res.end(`<title>page ${req.url}</title><a id=l href="/pr/3" style="display:block;width:300px;height:100px">next</a>`);
 }).listen(PORT);
@@ -271,7 +278,27 @@ try {
   check("groups separate: no duplicates counted across groups", cnt.count === 0, JSON.stringify(cnt));
   await setSettings({ groups: "preferSame" });
 
-  // 16. popup renders
+  // 16. links that arrive through redirects (Teams Safe Links, server redirects, script redirects)
+  await closeAllWeb();
+  const X = `${BASE}/x/1`;
+  await open(X); await sleep(1200);
+  await open(`${BASE}/evergreen-assets/safelinks/2/atp-safelinks.html?url=${encodeURIComponent(X)}&locale=en-gb`); await sleep(1500);
+  t = await webTabs();
+  check("Teams Safe Links page: closed straight away, existing tab active", t.length === 1 && t[0].url === X && t[0].active, JSON.stringify(t));
+  await open(`${BASE}/redir?to=${encodeURIComponent(X)}`); await sleep(1800);
+  t = await webTabs();
+  check("server redirect to an open page: closed", t.length === 1 && t[0].url === X, JSON.stringify(t));
+  await open(`${BASE}/jsredir?to=${encodeURIComponent(X)}`); await sleep(2500);
+  t = await webTabs();
+  check("script redirect to an open page: closed", t.length === 1 && t[0].url === X, JSON.stringify(t));
+  await open(`${BASE}/y`); await sleep(1500);
+  const yTarget = await targetFor(`${BASE}/y`);
+  const ys = await attachPage(yTarget);
+  await send("Page.navigate", { url: X, transitionType: "typed" }, ys); await sleep(1800);
+  t = await webTabs();
+  check("navigating a tab yourself to an open page is left alone", t.filter((x) => x.url === X).length === 2, JSON.stringify(t));
+
+  // 17. popup renders
   const pop = (await send("Target.createTarget", { url: `chrome-extension://${extId}/popup.html` })).targetId;
   await sleep(1200);
   const ps = await attachPage(pop);

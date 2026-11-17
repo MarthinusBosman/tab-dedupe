@@ -30,6 +30,9 @@ opening a new one, using URL rules you control.
 - `tabs`: Needed to read the URLs of open tabs, to detect whether a newly opened page is already open and to switch
   to, update or close tabs. URLs are processed locally and never transmitted.
 - `storage`: Saves the user's rules and settings, and the last downloaded copy of any online ruleset.
+- `webNavigation`: Follows a newly opened tab through redirects (for example Microsoft Safe Links pages in Teams
+  and Outlook) so a link that lands on an already-open page is still recognised. Only redirects of a just-opened
+  tab are looked at; nothing is stored or transmitted.
 - `alarms`: Refreshes user-added online rulesets on a schedule (default every 24 hours).
 - `scripting`: Only used when the user turns on the optional duplicate marker, to add "🔁" to the title of
   duplicate tabs. Nothing else on the page is read or changed.
