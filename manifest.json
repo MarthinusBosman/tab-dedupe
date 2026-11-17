@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Dedupe",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Switches to an already-open tab instead of opening a duplicate. Custom rules set how granular 'the same page' is.",
   "homepage_url": "https://github.com/MarthinusBosman/tab-dedupe",
   "icons": {
