@@ -1,0 +1,11 @@
+{
+  "name": "edge-tab-dedupe",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/rules.test.js",
+    "e2e": "node test/e2e.mjs",
+    "build": "node scripts/build.mjs"
+  },
+  "license": "MIT"
+}

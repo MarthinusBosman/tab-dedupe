@@ -1,0 +1,9 @@
+:root { color-scheme: light dark; --muted: #888; --err: #c0392b; --accent: #2563eb; }
+body { font: 13px/1.4 "Segoe UI", system-ui, sans-serif; margin: 0; }
+button { font: inherit; padding: 5px 10px; cursor: pointer; border-radius: 4px; border: 1px solid #8884; background: transparent; color: inherit; }
+button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=text], input[type=url], input[type=number], select { font: inherit; padding: 4px 6px; border: 1px solid #8886; border-radius: 4px; background: transparent; color: inherit; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.err { color: var(--err); }

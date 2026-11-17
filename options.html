@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Tab Dedupe settings</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 20px; } h2 { font-size: 15px; margin-top: 28px; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 4px; text-align: left; vertical-align: middle; }
+  th { font-weight: 600; border-bottom: 1px solid #8884; }
+  td input[type=text] { width: 100%; box-sizing: border-box; }
+  td.pattern { width: 50%; }
+  .ctl button { padding: 2px 7px; }
+  .setting { margin: 8px 0; }
+  code { background: #8882; padding: 1px 4px; border-radius: 3px; }
+  .ruleset { border: 1px solid #8884; border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
+  .ruleset header { display: flex; justify-content: space-between; gap: 8px; }
+</style>
+</head>
+<body>
+  <h1>Tab Dedupe</h1>
+  <p>
+    <button id="close" class="primary">Close duplicates now</button>
+    <span id="count" class="muted"></span>
+  </p>
+
+  <h2>Your rules</h2>
+  <p class="muted">
+    By default, pages are the same when the URL matches, ignoring <code>#fragment</code>, trailing slash and http/https.
+    Rules group more pages together. They are tried top to bottom, before online rules.<br>
+    In a pattern, <code>*</code> means ignore this part, <code>**</code> means ignore anything (including slashes),
+    <code>{name}</code> means one tab per value of this part. Anything after the pattern is ignored
+    (unless the pattern contains <code>?</code>, then the query is matched too).<br>
+    Examples: <code>dev.azure.com/*/*/_git/*/pullrequest/*</code> gives one PR tab;
+    <code>dev.azure.com/*/*/_git/{repo}/pullrequest/*</code> gives one PR tab per repo.
+  </p>
+  <table>
+    <thead><tr><th>On</th><th>Name</th><th>Pattern</th><th>When a match is open</th><th></th></tr></thead>
+    <tbody id="rules"></tbody>
+  </table>
+  <p><button id="addRule">Add rule</button></p>
+
+  <p>
+    Test a URL: <input type="url" id="testUrl" size="60" placeholder="https://dev.azure.com/...">
+    <span id="testOut" class="muted"></span>
+  </p>
+
+  <h2>Behaviour</h2>
+  <div class="setting">
+    <label>Ctrl+click (or "Duplicate tab") when the only matching tab is the one you're in:
+      <select id="openerSelf">
+        <option value="keepBoth">Open the new tab anyway</option>
+        <option value="applyRule">Apply the rule as normal</option>
+      </select>
+    </label>
+  </div>
+  <div class="setting">
+    <label><input type="checkbox" id="markers"> Mark duplicate tabs with 🔁 in the tab title</label>
+    <div class="muted">Needs permission to change pages on all sites; Edge asks when you switch this on.</div>
+  </div>
+  <div class="setting">
+    <label><input type="checkbox" id="paused"> Pause (don't switch tabs)</label>
+  </div>
+
+  <h2>Online rulesets</h2>
+  <p class="muted">
+    A JSON file like <code>{"name": "ADO", "rules": [{"name": "One PR tab", "pattern": "dev.azure.com/*/*/_git/*/pullrequest/*", "onMatch": "navigate"}]}</code>.
+    <code>onMatch</code> is <code>navigate</code> (show the new URL in the existing tab, default) or <code>switch</code>.
+  </p>
+  <p>
+    <input type="url" id="rsUrl" size="60" placeholder="https://raw.githubusercontent.com/.../rules.json">
+    <button id="addRs">Add</button>
+  </p>
+  <p>
+    Refresh every <input type="number" id="refreshHours" min="1" style="width:60px"> hours
+    <button id="refreshNow">Refresh now</button>
+    <span id="rsStatus" class="muted"></span>
+  </p>
+  <div id="rulesets"></div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

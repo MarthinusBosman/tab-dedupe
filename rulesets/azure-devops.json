@@ -1,0 +1,23 @@
+{
+  "name": "Azure DevOps",
+  "rules": [
+    {
+      "id": "ado-pr",
+      "name": "One pull request tab",
+      "pattern": "dev.azure.com/*/*/_git/*/pullrequest/*",
+      "onMatch": "navigate"
+    },
+    {
+      "id": "ado-work-item",
+      "name": "One work item tab",
+      "pattern": "dev.azure.com/*/*/_workitems/edit/*",
+      "onMatch": "navigate"
+    },
+    {
+      "id": "ado-build",
+      "name": "One pipeline run tab",
+      "pattern": "dev.azure.com/*/*/_build/results",
+      "onMatch": "navigate"
+    }
+  ]
+}
